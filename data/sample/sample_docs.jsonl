@@ -1,0 +1,3 @@
+{"doc_id": "1", "title": "Introduction to Search Engines", "text": "A search engine indexes documents and retrieves relevant results for a query."}
+{"doc_id": "2", "title": "BM25 Ranking", "text": "BM25 is a bag-of-words retrieval function used to rank documents by relevance."}
+{"doc_id": "3", "title": "Neural Ranking Models", "text": "Neural rerankers use dense embeddings to reorder candidate documents."}
