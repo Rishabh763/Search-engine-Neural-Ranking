@@ -1,0 +1,22 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: lse-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      # Heap: 2 GB is enough for a 100K-1M passage subset.
+      # For the full 8.8M MS MARCO corpus use 4g and give Docker/WSL2 at least 8 GB.
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+    ports:
+      - "9200:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -vq '\"status\":\"red\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  esdata:

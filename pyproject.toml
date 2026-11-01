@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "searchengine"
+version = "0.1.0"
+description = "Large-scale hybrid retrieval with neural reranking (BM25 + dense + cross-encoder)"
+authors = [{ name = "Rishabh Singh" }]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "PyStemmer>=2.2",
+    "tqdm>=4.66",
+    "ir_datasets>=0.5.6",
+    "elasticsearch>=8.13,<9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytrec_eval-terrier>=0.5.6"]
+
+[tool.setuptools.packages.find]
+include = ["searchengine*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = ["es: needs a running Elasticsearch at ES_URL"]

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Data, indexes, experiment outputs (large, reproducible from scripts)
+data/raw/
+data/processed/
+indexes/
+runs/
+models/
+
+# Env
+.env
+
+# Frontend
+Frontend/node_modules/
+Frontend/dist/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,10 +1,12 @@
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-pydantic==2.9.2
-numpy==1.26.4
-scikit-learn==1.5.2
-rank-bm25==0.2.2
-sentence-transformers==3.1.1
-tqdm==4.66.5
-jupyter==1.0.0
-pytest==8.3.3
+# Phase 1: data, BM25, evaluation.
+# Neural dependencies (torch, sentence-transformers, faiss, onnxruntime) arrive in later phases.
+numpy>=1.26
+scipy>=1.11
+PyStemmer>=2.2
+tqdm>=4.66
+ir_datasets>=0.5.6
+elasticsearch>=8.13,<9
+
+# dev
+pytest>=8
+pytrec_eval-terrier>=0.5.6
