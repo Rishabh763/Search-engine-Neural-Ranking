@@ -4,17 +4,22 @@ Purpose: a transparent reference implementation to cross-check Elasticsearch, to
 run unit tests without a server, and to make the scoring math explicit. For the
 full 8.8M corpus use Elasticsearch; this one is meant for up to ~1M passages.
 
-Scoring (Lucene >= 8 variant, the one Elasticsearch uses):
+Scoring (textbook Robertson BM25, which is also exactly what Elasticsearch computes):
 
-    score(q, d) = sum_{t in q} qtf(t) * IDF(t) * tf / (tf + k1 * (1 - b + b * |d| / avgdl))
+    score(q, d) = sum_{t in q} qtf(t) * IDF(t) * tf * (k1 + 1) / (tf + k1 * (1 - b + b * |d| / avgdl))
     IDF(t)      = ln(1 + (N - df(t) + 0.5) / (df(t) + 0.5))
 
-Lucene dropped the classic (k1 + 1) numerator factor. It multiplies every score
-by the same constant, so rankings are unchanged; dropping it keeps our scores
-numerically comparable with ES. qtf(t) is the term's count in the query (Lucene
-builds one SHOULD clause per query token, so repeated terms add up the same way).
-The one deliberate difference from Lucene: Lucene stores |d| lossily in one byte,
-so ES scores differ from ours in the 3rd-4th significant digit.
+About (k1 + 1): Lucene 8 removed it from its BM25Similarity (it scales every
+score by the same constant, so rankings are unchanged), but Elasticsearch keeps it
+through its own LegacyBM25Similarity for score compatibility. scripts/check_bm25_parity.py
+caught this: without the factor, every local score was exactly 1/(k1+1) = 0.526 of
+ES's. qtf(t) is the term's count in the query (Lucene builds one SHOULD clause per
+query token, so repeated terms add up the same way).
+Document length: Lucene stores |d| in a single byte (SmallFloat.intToByte4):
+exact below 40 tokens, then rounded down to 4 significant bits, so a 55-token
+passage is scored as 54 and a 100-token one as 96 (avgdl stays exact). With
+lucene_norms=True (default) we apply the same quantization, so scores match ES
+to float32 precision; lucene_norms=False gives textbook BM25 with exact lengths.
 
 Index layout ("impact" index)
 -----------------------------
@@ -47,6 +52,38 @@ from searchengine.text import Analyzer
 from searchengine.types import Document, Hit, Queries, Run
 
 
+# --- Lucene SmallFloat.intToByte4 / byte4ToInt (org.apache.lucene.util.SmallFloat) ---
+# 4-bit float codec: 3 mantissa bits + implicit leading 1, shifted. The first 24
+# byte values are reserved for exact small integers.
+_NUM_FREE_VALUES = 24  # 255 - longToInt4(Integer.MAX_VALUE)
+
+
+def _long_to_int4(i: int) -> int:
+    num_bits = i.bit_length()
+    if num_bits < 4:
+        return i  # "subnormal": stored exactly
+    shift = num_bits - 4
+    return ((i >> shift) & 0x07) | ((shift + 1) << 3)
+
+
+def _int4_to_long(i: int) -> int:
+    bits, shift = i & 0x07, (i >> 3) - 1
+    return bits if shift == -1 else (bits | 0x08) << shift
+
+
+def lucene_quantize_length(n: int) -> int:
+    """The document length Lucene's BM25 actually uses for a field of n tokens."""
+    if n < _NUM_FREE_VALUES:
+        return n
+    return _NUM_FREE_VALUES + _int4_to_long(_long_to_int4(n - _NUM_FREE_VALUES))
+
+
+def _quantize_lengths(lengths: np.ndarray) -> np.ndarray:
+    uniq, inv = np.unique(lengths.astype(np.int64), return_inverse=True)
+    table = np.array([lucene_quantize_length(int(u)) for u in uniq], dtype=np.float32)
+    return table[inv].reshape(lengths.shape)
+
+
 class LocalBM25(Retriever):
     name = "bm25-local"
 
@@ -59,8 +96,10 @@ class LocalBM25(Retriever):
         k1: float = 0.9,
         b: float = 0.4,
         analyzer: Analyzer | None = None,
+        lucene_norms: bool = True,
     ):
         self.doc_ids = doc_ids
+        self.lucene_norms = lucene_norms
         self.vocab = vocab
         self.tf = tf.tocsr()
         self.doc_len = doc_len.astype(np.float32)
@@ -71,6 +110,8 @@ class LocalBM25(Retriever):
         self.avgdl = float(self.doc_len.sum() / max(self.doc_count, 1))
         self.df = np.diff(self.tf.indptr).astype(np.float64)  # postings length per term
         self.idf = np.log1p((self.doc_count - self.df + 0.5) / (self.df + 0.5))
+        self.norm_len = _quantize_lengths(self.doc_len) if lucene_norms else self.doc_len
+        self._id_to_idx: dict[str, int] | None = None
         self.set_params(k1, b)
 
     # ---------------- construction ----------------
@@ -83,6 +124,7 @@ class LocalBM25(Retriever):
         b: float = 0.4,
         analyzer: Analyzer | None = None,
         total: int | None = None,
+        lucene_norms: bool = True,
     ) -> "LocalBM25":
         analyzer = analyzer or Analyzer()
         vocab: dict[str, int] = {}
@@ -105,7 +147,7 @@ class LocalBM25(Retriever):
         )
         tf.sum_duplicates()
         tf.sort_indices()
-        return cls(doc_ids, vocab, tf, np.frombuffer(lens, dtype=np.int32).copy(), k1, b, analyzer)
+        return cls(doc_ids, vocab, tf, np.frombuffer(lens, dtype=np.int32).copy(), k1, b, analyzer, lucene_norms)
 
     def set_params(self, k1: float, b: float) -> None:
         """Recompute the impact matrix W for new k1, b. Cost: O(nnz), no re-tokenizing."""
@@ -115,10 +157,10 @@ class LocalBM25(Retriever):
         tf = self.tf
         # Column (doc) index of each nonzero, to look up its length normalizer.
         doc_of_nnz = tf.indices
-        norm = self.k1 * (1.0 - self.b + self.b * self.doc_len / self.avgdl)  # per doc
+        norm = self.k1 * (1.0 - self.b + self.b * self.norm_len / self.avgdl)  # per doc
         term_of_nnz = np.repeat(np.arange(tf.shape[0]), np.diff(tf.indptr))
         f = tf.data
-        impact = self.idf[term_of_nnz] * f / (f + norm[doc_of_nnz])
+        impact = self.idf[term_of_nnz] * f * (self.k1 + 1.0) / (f + norm[doc_of_nnz])
         self.W = sp.csr_matrix((impact.astype(np.float32), tf.indices, tf.indptr), shape=tf.shape)
 
     # ---------------- search ----------------
@@ -130,6 +172,21 @@ class LocalBM25(Retriever):
         cols = np.fromiter((self.vocab[t] for t in counts), dtype=np.int32, count=len(counts))
         data = np.fromiter(counts.values(), dtype=np.float32, count=len(counts))
         return sp.csr_matrix((data, (np.zeros(len(cols), dtype=np.int32), cols)), shape=(1, len(self.vocab)))
+
+    def score_docs(self, query: str, doc_ids: list[str]) -> np.ndarray:
+        """BM25 scores of specific documents (0 for unknown ids or no term match)."""
+        if self._id_to_idx is None:
+            self._id_to_idx = {d: i for i, d in enumerate(self.doc_ids)}
+        out = np.zeros(len(doc_ids), dtype=np.float32)
+        q = self._query_vector(query)
+        if q is None:
+            return out
+        dense = (q @ self.W).toarray().ravel()
+        for j, d in enumerate(doc_ids):
+            i = self._id_to_idx.get(d)
+            if i is not None:
+                out[j] = dense[i]
+        return out
 
     def _topk_from_row(self, scores: sp.csr_matrix, k: int) -> list[Hit]:
         idx, vals = scores.indices, scores.data
@@ -175,7 +232,17 @@ class LocalBM25(Retriever):
         sp.save_npz(path / "tf.npz", self.tf)
         np.save(path / "doc_len.npy", self.doc_len)
         with open(path / "meta.json", "w", encoding="utf-8", newline="\n") as f:
-            json.dump({"k1": self.k1, "b": self.b, "analyzer": self.analyzer.config(), "n_docs": self.n_docs}, f, indent=2)
+            json.dump(
+                {
+                    "k1": self.k1,
+                    "b": self.b,
+                    "lucene_norms": self.lucene_norms,
+                    "analyzer": self.analyzer.config(),
+                    "n_docs": self.n_docs,
+                },
+                f,
+                indent=2,
+            )
         with open(path / "doc_ids.json", "w", encoding="utf-8", newline="\n") as f:
             json.dump(self.doc_ids, f)
         with open(path / "vocab.json", "w", encoding="utf-8", newline="\n") as f:
@@ -198,4 +265,5 @@ class LocalBM25(Retriever):
             meta["k1"] if k1 is None else k1,
             meta["b"] if b is None else b,
             Analyzer.from_config(meta["analyzer"]),
+            meta.get("lucene_norms", False),  # indexes saved before this option used exact lengths
         )

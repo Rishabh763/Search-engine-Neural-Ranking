@@ -28,7 +28,7 @@ class Settings:
 
 def get_settings() -> Settings:
     return Settings(
-        es_url=os.environ.get("ES_URL", "http://localhost:9200"),
+        es_url=os.environ.get("ES_URL", "http://127.0.0.1:9200"),
         data_dir=_path("DATA_DIR", "data/processed"),
         index_dir=_path("INDEX_DIR", "indexes"),
         runs_dir=_path("RUNS_DIR", "runs"),

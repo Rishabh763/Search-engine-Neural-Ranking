@@ -41,7 +41,7 @@ MS MARCO dev MRR@10 ≈ 0.184, TREC DL19 nDCG@10 ≈ 0.506, DL20 nDCG@10 ≈ 0.4
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
-pytest                                   # 30 tests, no network or server needed
+pytest                                   # unit tests; the ES test runs if ES is up
 
 # 1. Sanity-check the install with an offline synthetic collection
 python scripts/prepare_data.py --name toy --toy
@@ -83,17 +83,25 @@ searchengine/
   index/es.py   index definition, bulk loading, k1/b updates without reindexing
   eval/         metrics (validated against trec_eval), randomization test, TREC IO, latency
   text.py       analyzer mirroring ES `english` (for BM25 only; neural models get raw text)
-scripts/        prepare_data, build_index, evaluate, compare_runs
+scripts/        prepare_data, build_index, evaluate, compare_runs,
+                check_analyzer, check_bm25_parity, es_latency_probe (verification tools)
 tests/          unit tests; `pytest -m es` adds an ES-vs-local integration test
 Frontend/       UI (reworked in phase 5)
 ```
 
 ## Design decisions
 
-- **Two BM25 implementations.** Elasticsearch serves the full corpus. A local
-  SciPy implementation (precomputed BM25 impacts in a CSR matrix; a query is one
-  sparse product) is a transparent reference to cross-check ES and to test without
-  a server. Both use Lucene's BM25 variant, so scores are directly comparable.
+- **Two BM25 implementations, verified against each other.** Elasticsearch serves
+  the full corpus. A local SciPy implementation (precomputed BM25 impacts in a CSR
+  matrix; a query is one sparse product) is a transparent reference. Matching
+  Lucene exactly took three fixes, each found by measurement
+  (`scripts/check_analyzer.py`, `scripts/check_bm25_parity.py`): UAX#29-style
+  tokenization (curly apostrophes, numbers), Lucene's Porter variant (Martin
+  Porter's reference code, not the published algorithm), and Lucene's 1-byte
+  document-length quantization.
+- **`127.0.0.1`, not `localhost`.** On Windows + Docker Desktop, `localhost` added
+  ~45 ms to every search; ES itself needs ~3 ms (`scripts/es_latency_probe.py`
+  splits client time into ES `took` and transport overhead).
 - **One ES shard.** BM25 statistics are per shard; a single shard keeps IDF exact.
 - **BM25 parameters in the index's default similarity**, changeable by
   close/update/open, so k1/b tuning needs no reindexing (`evaluate.py --k1 --b`).

@@ -60,7 +60,7 @@ def _es_available():
     try:
         from searchengine.index.es import make_client
 
-        return make_client(os.environ.get("ES_URL", "http://localhost:9200"), timeout=2).ping()
+        return make_client(os.environ.get("ES_URL", "http://127.0.0.1:9200"), timeout=2).ping()
     except Exception:
         return False
 
@@ -73,7 +73,7 @@ def test_es_matches_local_bm25_on_toy():
     from searchengine.retrieval.bm25_local import LocalBM25
 
     docs, queries, qrels = make_toy_collection(n_docs=1000, n_queries=40)
-    es = make_client(os.environ.get("ES_URL", "http://localhost:9200"))
+    es = make_client(os.environ.get("ES_URL", "http://127.0.0.1:9200"))
     name = "pytest-toy"
     create_index(es, name, 0.9, 0.4, overwrite=True)
     bulk_index(es, name, docs)
@@ -82,7 +82,13 @@ def test_es_matches_local_bm25_on_toy():
         local_run = LocalBM25.build(docs, 0.9, 0.4).batch_search(queries, k=100)
         m_es = evaluate(es_run, qrels, ["ndcg@10"]).mean["ndcg@10"]
         m_local = evaluate(local_run, qrels, ["ndcg@10"]).mean["ndcg@10"]
-        # Lucene's 1-byte length encoding causes tiny score differences; rankings stay close.
-        assert abs(m_es - m_local) < 0.02
+        assert abs(m_es - m_local) < 0.005
+        # Score-level parity: same analyzer, IDF, avgdl, length quantization and (k1+1).
+        local = LocalBM25.build(docs, 0.9, 0.4)
+        for qid, text in list(queries.items())[:20]:
+            ids = list(es_run[qid])[:10]
+            ours = local.score_docs(text, ids)
+            for d, s in zip(ids, ours):
+                assert s == pytest.approx(es_run[qid][d], rel=1e-4)
     finally:
         es.indices.delete(index=name)
