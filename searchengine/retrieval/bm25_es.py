@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from searchengine.index.es import SEARCH_FIELD
 from searchengine.retrieval.base import Retriever
-from searchengine.types import Hit, Queries, Run
+from searchengine.types import Document, Hit, Queries, Run
 
 
 class ElasticsearchBM25(Retriever):
@@ -58,9 +58,13 @@ class ElasticsearchBM25(Retriever):
                 run[qid] = {h.doc_id: h.score for h in self._parse(r)}
         return run
 
-    def get_documents(self, doc_ids: list[str]) -> dict[str, dict]:
-        """Fetch stored title/text for ids (used for snippets and by the reranker)."""
+    def get_documents(self, doc_ids: list[str]) -> dict[str, Document]:
+        """Fetch stored title/text for ids in one `_mget` (snippets + reranker input)."""
         if not doc_ids:
             return {}
         resp = self.es.mget(index=self.index, ids=doc_ids)
-        return {d["_id"]: d["_source"] for d in resp["docs"] if d.get("found")}
+        return {
+            d["_id"]: Document(d["_id"], d["_source"].get("text", ""), d["_source"].get("title", ""))
+            for d in resp["docs"]
+            if d.get("found")
+        }

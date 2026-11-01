@@ -1,0 +1,5 @@
+# Keep LF line endings in the repo and working copy on every OS
+* text=auto eol=lf
+*.png binary
+*.npy binary
+*.npz binary

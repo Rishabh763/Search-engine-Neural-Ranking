@@ -16,7 +16,7 @@ import _bootstrap  # noqa: F401
 
 from searchengine.config import get_settings
 from searchengine.data.collection import Collection
-from searchengine.data.registry import EVAL_SETS, EvalSetSpec
+from searchengine.data.registry import spec_or_default
 from searchengine.eval.latency import measure_latency
 from searchengine.eval.metrics import evaluate
 from searchengine.eval.trec import write_run
@@ -41,11 +41,6 @@ def load_retriever(args, coll, s):
     raise SystemExit(f"unknown retriever {args.retriever}")
 
 
-def spec_for(name: str) -> EvalSetSpec:
-    # Toy/custom eval sets fall back to a generic spec.
-    return EVAL_SETS.get(name) or EvalSetSpec(name, "", "", ("ndcg@10", "mrr@10", "recall@100"), "ndcg@10")
-
-
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--collection", required=True)
@@ -65,7 +60,7 @@ def main() -> None:
     tag = args.tag or retriever.name
 
     for es_name in args.eval_sets or coll.eval_set_names:
-        spec = spec_for(es_name)
+        spec = spec_or_default(es_name)
         queries, qrels = coll.queries(es_name), coll.qrels(es_name)
 
         t0 = time.perf_counter()

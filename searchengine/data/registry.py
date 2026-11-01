@@ -74,3 +74,8 @@ def get_eval_set(name: str) -> EvalSetSpec:
         return EVAL_SETS[name]
     except KeyError:
         raise KeyError(f"Unknown eval set {name!r}. Known: {sorted(EVAL_SETS)}") from None
+
+
+def spec_or_default(name: str) -> EvalSetSpec:
+    """Registered spec, or a generic one for custom/toy eval sets."""
+    return EVAL_SETS.get(name) or EvalSetSpec(name, "", "", ("ndcg@10", "mrr@10", "recall@100"), "ndcg@10")

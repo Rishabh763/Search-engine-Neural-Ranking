@@ -19,8 +19,8 @@ Query
 
 | Phase | Scope | State |
 |---|---|---|
-| 1 | Data pipeline, BM25 (Elasticsearch + local reference), evaluation harness | **done** |
-| 2 | Cross-encoder reranking, FastAPI search endpoint | next |
+| 1 | Data pipeline, BM25 (Elasticsearch + local reference, score-level parity), evaluation harness | **done** |
+| 2 | Cross-encoder reranking, FastAPI search endpoint | **built**, measuring |
 | 3 | Dense retrieval (FAISS IVF-PQ), RRF fusion, BEIR zero-shot | planned |
 | 4 | Cross-encoder fine-tuning with BM25 hard negatives | planned |
 | 5 | ONNX + int8, latency vs candidate-depth curve, minimal UI | planned |
@@ -71,6 +71,25 @@ python scripts/build_index.py --collection msmarco-full --backend es
 python scripts/evaluate.py --collection msmarco-full --retriever bm25-es
 ```
 
+### Phase 2: cross-encoder reranking and the search API
+
+```powershell
+pip install -e ".[dev,neural,api]"      # GPU: install CUDA torch first, see below
+
+# Rerank the saved BM25 run (top 100 per query) and evaluate
+python scripts/rerank.py --collection msmarco-100k --first-stage bm25-es --depth 100
+python scripts/compare_runs.py runs/msmarco-100k/dl19/bm25-es.json "runs/msmarco-100k/dl19/bm25-es+ms-marco-MiniLM-L-6-v2@100.json"
+
+# Serve it: Swagger UI at http://127.0.0.1:8000/docs
+uvicorn searchengine.api:app --port 8000
+curl "http://127.0.0.1:8000/search?q=what+is+a+cross+encoder&k=5&candidates=100"
+```
+
+NVIDIA GPU: install the CUDA build of PyTorch before the extras, e.g.
+`pip install torch --index-url https://download.pytorch.org/whl/cu126`
+(pick the CUDA version matching your driver from pytorch.org). `--device auto`
+uses the GPU in fp16 when available.
+
 `evaluate.py` writes a TREC run file and a JSON report (mean and per-query
 metrics, batch QPS, single-query p50/p95/p99) to `runs/<collection>/<eval_set>/`.
 
@@ -79,11 +98,16 @@ metrics, batch QPS, single-query p50/p95/p99) to `runs/<collection>/<eval_set>/`
 ```text
 searchengine/
   data/         registry (datasets + official metrics), collection format, subset builder, toy data
+  ranking/      Reranker interface, CrossEncoderReranker (transformers; length-sorted batching, fp16 on GPU)
+  pipeline.py   retrieve -> fetch text -> rerank, timed per stage; rerank_run for offline evaluation
+  docstore.py   byte-offset random access to passages (ES backend uses _mget instead)
+  api.py        FastAPI: /search, /health (uvicorn searchengine.api:app)
+  factory.py    builds retrievers / doc sources / rerankers / pipelines from settings
   retrieval/    Retriever interface, LocalBM25 (SciPy impact index), ElasticsearchBM25 (msearch)
   index/es.py   index definition, bulk loading, k1/b updates without reindexing
   eval/         metrics (validated against trec_eval), randomization test, TREC IO, latency
   text.py       analyzer mirroring ES `english` (for BM25 only; neural models get raw text)
-scripts/        prepare_data, build_index, evaluate, compare_runs,
+scripts/        prepare_data, build_index, evaluate, rerank, compare_runs,
                 check_analyzer, check_bm25_parity, es_latency_probe (verification tools)
 tests/          unit tests; `pytest -m es` adds an ES-vs-local integration test
 Frontend/       UI (reworked in phase 5)
