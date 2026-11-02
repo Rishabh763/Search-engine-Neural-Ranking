@@ -25,7 +25,7 @@ from searchengine.data.collection import Collection
 from searchengine.data.registry import spec_or_default
 from searchengine.docstore import DocStore
 from searchengine.eval.metrics import evaluate
-from searchengine.eval.trec import read_run, write_run
+from searchengine.eval.trec import read_run, safe_name, write_run
 from searchengine.factory import build_reranker
 from searchengine.pipeline import rerank_run
 from searchengine.ranking.cross_encoder import DEFAULT_MODEL
@@ -60,14 +60,15 @@ def main() -> None:
     env = environment_info()
     print(f"machine: {short_label(env)}")
     print(f"reranker: {info}  (loaded in {reranker.load_seconds:.1f}s)")
-    tag = args.tag or f"{args.first_stage}+{reranker_label(reranker.name)}@{args.depth}"
+    first_stage = safe_name(args.first_stage)
+    tag = safe_name(args.tag or f"{first_stage}+{reranker_label(reranker.name)}@{args.depth}")
 
     for es_name in args.eval_sets or coll.eval_set_names:
         spec = spec_or_default(es_name)
         run_dir = s.runs_dir / coll.name / es_name
-        first_path = run_dir / f"{args.first_stage}.run"
+        first_path = run_dir / f"{first_stage}.run"
         if not first_path.exists():
-            raise SystemExit(f"{first_path} not found: run scripts/evaluate.py with --tag {args.first_stage} first")
+            raise SystemExit(f"{first_path} not found: run scripts/evaluate.py for that retriever first")
         queries, qrels = coll.queries(es_name), coll.qrels(es_name)
         if args.max_queries:
             keep = sorted(queries)[: args.max_queries]
@@ -99,7 +100,7 @@ def main() -> None:
             "eval_set": es_name,
             "tag": tag,
             "retriever": tag,
-            "first_stage": args.first_stage,
+            "first_stage": first_stage,
             "depth": args.depth,
             "reranker": info,
             "rel_threshold": spec.rel_threshold,

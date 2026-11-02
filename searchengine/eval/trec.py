@@ -6,9 +6,20 @@ run line:    <qid> Q0 <docid> <rank> <score> <tag>
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from searchengine.types import Qrels, Run
+
+_UNSAFE = re.compile(r'[<>:"/\\|?*]')
+
+
+def safe_name(tag: str) -> str:
+    """File-system-safe run name. On Windows NTFS a ':' in a file name doesn't fail,
+    it silently writes an *alternate data stream* (a hidden stream attached to the file
+    named up to the colon): invisible in Explorer, lost on copy/zip, untracked by git.
+    'dense-flat:msmarco-MiniLM' -> 'dense-flat-msmarco-MiniLM'."""
+    return _UNSAFE.sub("-", tag)
 
 
 def read_qrels(path: Path) -> Qrels:

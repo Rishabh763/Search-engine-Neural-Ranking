@@ -29,7 +29,7 @@ from searchengine.docstore import DocStore
 from searchengine.envinfo import environment_info, short_label
 from searchengine.eval.metrics import evaluate, rank_documents
 from searchengine.eval.sweep import run_at_depth
-from searchengine.eval.trec import read_run
+from searchengine.eval.trec import read_run, safe_name
 from searchengine.factory import build_reranker
 from searchengine.pipeline import passage_text
 
@@ -59,6 +59,7 @@ def main() -> None:
     args = p.parse_args()
 
     s = get_settings()
+    args.reranked = safe_name(args.reranked)
     coll = Collection.from_name(args.collection, s.data_dir)
     sets = args.eval_sets or [
         e for e in coll.eval_set_names if (s.runs_dir / coll.name / e / f"{args.reranked}.json").exists()
@@ -74,7 +75,7 @@ def main() -> None:
             rep = json.load(f)
         report0 = report0 or rep
         spec = spec_or_default(es_name)
-        first = read_run(d / f"{rep['first_stage']}.run")
+        first = read_run(d / f"{safe_name(rep['first_stage'])}.run")
         reranked = read_run(d / f"{args.reranked}.run")
         qrels = coll.qrels(es_name)
         queries = set(reranked)
@@ -98,7 +99,7 @@ def main() -> None:
         )
         info = reranker.info()
         les = args.latency_eval_set if args.latency_eval_set in coll.eval_set_names else sets[0]
-        first = read_run(s.runs_dir / coll.name / les / f"{report0['first_stage']}.run")
+        first = read_run(s.runs_dir / coll.name / les / f"{safe_name(report0['first_stage'])}.run")
         queries = coll.queries(les)
         qids = random.Random(0).sample(sorted(first), min(args.latency_queries, len(first)))
         docs = DocStore.open(coll, s.index_dir)
@@ -136,7 +137,7 @@ def main() -> None:
 
     out_dir = s.runs_dir / coll.name / "sweeps"
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = f"{args.reranked}__{env.get('hostname', 'host')}".replace("/", "_").replace("\\", "_")
+    stem = safe_name(f"{args.reranked}__{env.get('hostname', 'host')}")
     with open(out_dir / f"{stem}.json", "w", encoding="utf-8", newline="\n") as f:
         json.dump(
             {"collection": coll.name, "reranked": args.reranked, "first_stage": report0["first_stage"],

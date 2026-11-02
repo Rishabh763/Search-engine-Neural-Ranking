@@ -102,3 +102,12 @@ def test_run_file_roundtrip_preserves_ranking_of_close_scores(tmp_path):
     back = read_run(tmp_path / "r.run")
     assert rank_documents(back["q"]) == rank_documents(run["q"])
     assert back["q"] == run["q"]
+
+
+def test_safe_name_removes_windows_stream_separator():
+    from searchengine.eval.trec import safe_name
+
+    assert safe_name("dense-flat:msmarco-MiniLM-L6-cos-v5") == "dense-flat-msmarco-MiniLM-L6-cos-v5"
+    assert safe_name("rrf(bm25-es+dense-flat:m)") == "rrf(bm25-es+dense-flat-m)"
+    assert safe_name('a<b>c"d/e\\f|g?h*i') == "a-b-c-d-e-f-g-h-i"
+    assert safe_name("bm25-es+ms-marco-MiniLM-L-6-v2@100") == "bm25-es+ms-marco-MiniLM-L-6-v2@100"

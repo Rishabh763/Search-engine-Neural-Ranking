@@ -33,6 +33,23 @@ def _cpu_name() -> str:
     return platform.processor() or "unknown"
 
 
+def _gpu_adapters() -> list[str]:
+    """Graphics adapters as the OS sees them (catches AMD/Intel GPUs that torch can't use)."""
+    try:
+        if sys.platform == "win32":
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_VideoController).Name"],
+                capture_output=True, text=True, timeout=8,
+            ).stdout
+            return [x.strip() for x in out.splitlines() if x.strip()]
+        if sys.platform == "darwin":
+            out = subprocess.run(["system_profiler", "SPDisplaysDataType"], capture_output=True, text=True, timeout=8).stdout
+            return [ln.split(":", 1)[1].strip() for ln in out.splitlines() if "Chipset Model" in ln]
+    except Exception:
+        pass
+    return []
+
+
 def _version(module: str) -> str | None:
     try:
         mod = __import__(module)
@@ -75,6 +92,9 @@ def environment_info() -> dict:
             info["gpu_memory_gb"] = round(torch.cuda.get_device_properties(0).total_memory / 2**30, 1)
     except Exception:
         pass
+    adapters = _gpu_adapters()
+    if adapters:
+        info["gpu_adapters"] = adapters
     try:
         import onnxruntime as ort
 
@@ -92,5 +112,12 @@ def short_label(info: dict) -> str:
     """One line for printing: 'Intel i5-1235U, 10 cores (on battery), no GPU'."""
     cores = info.get("physical_cores") or info.get("logical_cores")
     batt = " (on battery)" if info.get("on_battery") else ""
-    gpu = info.get("gpu") or ("Apple GPU (MPS)" if info.get("mps_available") else "no GPU")
+    if info.get("gpu"):
+        gpu = info["gpu"]
+    elif info.get("mps_available"):
+        gpu = "Apple GPU (MPS)"
+    elif "DmlExecutionProvider" in info.get("onnx_providers", []):
+        gpu = f"{(info.get('gpu_adapters') or ['GPU'])[0]} via DirectML"
+    else:
+        gpu = "no GPU usable"
     return f"{info.get('cpu', '?')}, {cores} cores{batt}, {gpu}"

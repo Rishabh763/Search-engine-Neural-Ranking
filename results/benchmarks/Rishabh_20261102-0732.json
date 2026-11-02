@@ -1,0 +1,167 @@
+{
+  "collection": "msmarco-100k",
+  "environment": {
+    "timestamp_utc": "2026-11-02T01:59:24+00:00",
+    "hostname": "Rishabh",
+    "os": "Windows-11-10.0.26300-SP0",
+    "python": "3.12.0",
+    "cpu": "AMD Ryzen 5 5500U with Radeon Graphics",
+    "logical_cores": 12,
+    "physical_cores": 6,
+    "ram_gb": 9.9,
+    "on_battery": false,
+    "torch": "2.15.0+cpu",
+    "torch_threads": 6,
+    "cuda_available": false,
+    "mps_available": false,
+    "gpu_adapters": [
+      "AMD Radeon(TM) Graphics"
+    ],
+    "onnx_providers": [
+      "DmlExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "numpy": "2.5.4",
+    "transformers": "5.22.1",
+    "sentence_transformers": "6.2.0",
+    "onnxruntime": "1.24.4",
+    "faiss": "1.15.1",
+    "elasticsearch": "8.19.3"
+  },
+  "first_stage": {
+    "bm25-es@k100": {
+      "p50_ms": 8.6,
+      "p95_ms": 10.33,
+      "n": 50
+    },
+    "bm25-es@k1000": {
+      "p50_ms": 30.94,
+      "p95_ms": 35.08,
+      "n": 50
+    },
+    "bm25-local@k100": {
+      "p50_ms": 0.76,
+      "p95_ms": 1.14,
+      "n": 50
+    },
+    "bm25-local@k1000": {
+      "p50_ms": 1.76,
+      "p95_ms": 3.11,
+      "n": 50
+    },
+    "dense:flat@k100": {
+      "p50_ms": 37.62,
+      "p95_ms": 43.53,
+      "n": 50
+    },
+    "dense:flat@k1000": {
+      "p50_ms": 36.99,
+      "p95_ms": 40.36,
+      "n": 50
+    },
+    "dense:hnsw@k100": {
+      "p50_ms": 16.28,
+      "p95_ms": 22.73,
+      "n": 50
+    },
+    "dense:hnsw@k1000": {
+      "p50_ms": 21.21,
+      "p95_ms": 24.54,
+      "n": 50
+    },
+    "dense:ivfpq@k100": {
+      "p50_ms": 13.42,
+      "p95_ms": 16.24,
+      "n": 50
+    },
+    "dense:ivfpq@k1000": {
+      "p50_ms": 15.16,
+      "p95_ms": 18.4,
+      "n": 50
+    },
+    "hybrid:es+flat@k100": {
+      "p50_ms": 78.52,
+      "p95_ms": 102.42,
+      "n": 50
+    },
+    "hybrid:es+flat@k1000": {
+      "p50_ms": 108.84,
+      "p95_ms": 131.56,
+      "n": 50
+    }
+  },
+  "rerank": {
+    "torch-fp32@20": {
+      "p50_ms": 463.98,
+      "p95_ms": 711.01,
+      "n": 10,
+      "pairs_per_s": 43.1
+    },
+    "torch-fp32@100": {
+      "p50_ms": 2244.74,
+      "p95_ms": 2674.48,
+      "n": 10,
+      "pairs_per_s": 44.5
+    },
+    "torch-int8@20": {
+      "p50_ms": 463.0,
+      "p95_ms": 613.77,
+      "n": 10,
+      "pairs_per_s": 43.2
+    },
+    "torch-int8@100": {
+      "p50_ms": 1912.41,
+      "p95_ms": 2327.01,
+      "n": 10,
+      "pairs_per_s": 52.3
+    },
+    "onnx-fp32@20": {
+      "p50_ms": 472.68,
+      "p95_ms": 866.86,
+      "n": 10,
+      "pairs_per_s": 42.3
+    },
+    "onnx-fp32@100": {
+      "p50_ms": 2239.44,
+      "p95_ms": 3006.73,
+      "n": 10,
+      "pairs_per_s": 44.7
+    },
+    "onnx-int8@20": {
+      "p50_ms": 442.79,
+      "p95_ms": 717.59,
+      "n": 10,
+      "pairs_per_s": 45.2
+    },
+    "onnx-int8@100": {
+      "p50_ms": 1796.77,
+      "p95_ms": 2215.79,
+      "n": 10,
+      "pairs_per_s": 55.7
+    },
+    "onnx-fp16-dml@20": {
+      "p50_ms": 283.79,
+      "p95_ms": 354.66,
+      "n": 10,
+      "pairs_per_s": 70.5
+    },
+    "onnx-fp16-dml@100": {
+      "p50_ms": 948.72,
+      "p95_ms": 1302.79,
+      "n": 10,
+      "pairs_per_s": 105.4
+    },
+    "onnx-fp32-dml@20": {
+      "p50_ms": 281.2,
+      "p95_ms": 401.47,
+      "n": 10,
+      "pairs_per_s": 71.1
+    },
+    "onnx-fp32-dml@100": {
+      "p50_ms": 1215.93,
+      "p95_ms": 1750.79,
+      "n": 10,
+      "pairs_per_s": 82.2
+    }
+  }
+}

@@ -22,7 +22,7 @@ from searchengine.data.collection import Collection
 from searchengine.data.registry import spec_or_default
 from searchengine.eval.latency import measure_latency
 from searchengine.eval.metrics import evaluate
-from searchengine.eval.trec import write_run
+from searchengine.eval.trec import safe_name, write_run
 
 
 def load_retriever(args, coll, s):
@@ -82,7 +82,7 @@ def main() -> None:
     retriever, params = load_retriever(args, coll, s)
     env = environment_info()
     print(f"machine: {short_label(env)}")
-    tag = args.tag or retriever.name
+    tag = safe_name(args.tag or retriever.name)
 
     for es_name in args.eval_sets or coll.eval_set_names:
         spec = spec_or_default(es_name)
