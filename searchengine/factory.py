@@ -96,6 +96,9 @@ def build_pipeline(
 ) -> SearchPipeline:
     s = settings or get_settings()
     coll = Collection.from_name(collection, s.data_dir)
-    retriever = build_retriever(backend, coll, s, dense_index=dense_index, device=device)
+    # The dense query encoder runs on PyTorch, which has no DirectML device: "dml" only
+    # applies to ONNX rerankers, so the encoder falls back to auto (CPU / CUDA / MPS).
+    torch_device = device if device in ("auto", "cpu", "cuda", "mps") else "auto"
+    retriever = build_retriever(backend, coll, s, dense_index=dense_index, device=torch_device)
     reranker = build_reranker(model, device, quantize=quantize, onnx_variant=onnx_variant)
     return SearchPipeline(retriever, build_docs(backend, coll, s, retriever), reranker)

@@ -27,6 +27,7 @@ Export notes (each one learned the hard way, see tests):
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path, PurePath
 
@@ -264,6 +265,10 @@ class OnnxCrossEncoderReranker(Reranker):
         providers = [PROVIDERS[device]] + (["CPUExecutionProvider"] if device != "cpu" else [])
         self.session = ort.InferenceSession(str(self.dir / self.meta["files"][variant]["name"]), so, providers=providers)
         self.active_provider = self.session.get_providers()[0]
+        # ONNX Runtime docs: a DirectML session supports only one thread calling Run at a
+        # time. The API serves requests from a thread pool, so serialize GPU runs; CPU
+        # sessions are thread-safe and stay lock-free.
+        self._run_lock = threading.Lock() if device != "cpu" else None
         self._inputs = {i.name for i in self.session.get_inputs()}
         self.num_labels = int(self.meta.get("num_labels", 1))
         self.load_seconds = time.perf_counter() - t0
@@ -297,7 +302,11 @@ class OnnxCrossEncoderReranker(Reranker):
             if "token_type_ids" not in enc:
                 enc["token_type_ids"] = np.zeros_like(enc["input_ids"])
             feeds = {k: enc[k].astype(np.int64) for k in INPUT_NAMES if k in self._inputs}
-            logits = self.session.run(None, feeds)[0].astype(np.float32)
+            if self._run_lock is not None:
+                with self._run_lock:
+                    logits = self.session.run(None, feeds)[0].astype(np.float32)
+            else:
+                logits = self.session.run(None, feeds)[0].astype(np.float32)
             out[idx] = logits[:, 0] if self.num_labels == 1 else logits[:, -1] - logits[:, 0]
         return out
 

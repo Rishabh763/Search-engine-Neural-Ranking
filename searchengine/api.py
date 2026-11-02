@@ -14,7 +14,9 @@ Configuration (environment variables):
                                                        (default cross-encoder/ms-marco-MiniLM-L-6-v2)
     RERANK_QUANTIZE     int8 = PyTorch dynamic int8 on CPU (default off)
     RERANK_ONNX_VARIANT int8 | fp32, when RERANK_MODEL is an ONNX export dir (default int8)
-    RERANK_DEVICE       auto | cpu | cuda | mps        (default auto)
+    RERANK_DEVICE       auto | cpu | cuda | mps | dml  (default auto; dml = DirectML, ONNX only)
+    SEARCH_CANDIDATES   default `candidates` per request (default 100; 20 is the measured
+                        sweet spot with dense retrieval, see README "Operating points")
 
 Endpoints are plain `def` (not `async def`): retrieval and model inference are
 blocking, CPU/GPU-bound calls, and FastAPI runs `def` endpoints in a worker
@@ -23,6 +25,7 @@ thread pool so they don't block the event loop.
 
 from __future__ import annotations
 
+import math
 import os
 from contextlib import asynccontextmanager
 
@@ -34,15 +37,22 @@ from searchengine.pipeline import SearchPipeline
 SNIPPET_CHARS = 300
 
 
+def sigmoid(x: float) -> float:
+    return 1.0 / (1.0 + math.exp(-x)) if x >= 0 else math.exp(x) / (1.0 + math.exp(x))  # overflow-safe
+
+
 class ResultOut(BaseModel):
     rank: int
     id: str
     title: str
     snippet: str
     score: float
-    bm25_score: float  # first-stage score (BM25, dense cosine, or RRF, by backend)
-    bm25_rank: int
+    first_stage_score: float  # BM25 score, dense cosine, or RRF score, depending on the backend
+    first_stage_rank: int
     rerank_score: float | None
+    # sigmoid(rerank logit). The MS MARCO cross-encoders are trained with binary
+    # cross-entropy, so this approximates P(relevant); other rerankers may not be calibrated.
+    relevance: float | None
 
 
 class TimingsOut(BaseModel):
@@ -54,9 +64,11 @@ class TimingsOut(BaseModel):
 
 class SearchResponse(BaseModel):
     query: str
+    retriever: str
     k: int
     candidates: int
     reranked: bool
+    filtered_out: int  # results dropped by min_relevance
     results: list[ResultOut]
     timings: TimingsOut
 
@@ -64,6 +76,7 @@ class SearchResponse(BaseModel):
 def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None) -> FastAPI:
     """Pass a pipeline for tests; otherwise one is built from env vars at startup."""
     state: dict = {"pipeline": pipeline, "meta": meta or {}}
+    default_candidates = int(os.environ.get("SEARCH_CANDIDATES", "100"))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -85,7 +98,7 @@ def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None)
             state["pipeline"].search("warm up query", k=10, candidates=20)
         yield
 
-    app = FastAPI(title="Large-Scale Search Engine", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Large-Scale Search Engine", version="0.3.0", lifespan=lifespan)
 
     @app.get("/health")
     def health() -> dict:
@@ -101,8 +114,9 @@ def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None)
     def search(
         q: str = Query(..., min_length=1, max_length=1000, description="query text"),
         k: int = Query(10, ge=1, le=100, description="results to return"),
-        candidates: int = Query(100, ge=1, le=1000, description="first-stage candidates to rerank"),
+        candidates: int = Query(default_candidates, ge=1, le=1000, description="first-stage candidates to rerank"),
         rerank: bool = Query(True, description="apply the cross-encoder"),
+        min_relevance: float = Query(0.0, ge=0.0, le=1.0, description="drop reranked results below this relevance"),
     ) -> SearchResponse:
         if not q.strip():
             raise HTTPException(status_code=422, detail="query is blank")
@@ -111,24 +125,32 @@ def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None)
         p: SearchPipeline = state["pipeline"]
         results, t = p.search(q, k=k, candidates=candidates, rerank=rerank)
         reranked = rerank and p.reranker is not None
-        return SearchResponse(
-            query=q,
-            k=k,
-            candidates=candidates if reranked else k,
-            reranked=reranked,
-            results=[
+        out = []
+        for r in results:
+            rel = sigmoid(r.rerank_score) if r.rerank_score is not None else None
+            if rel is not None and rel < min_relevance:
+                continue
+            out.append(
                 ResultOut(
                     rank=r.rank,
                     id=r.doc_id,
                     title=r.title,
                     snippet=r.text[:SNIPPET_CHARS] + ("..." if len(r.text) > SNIPPET_CHARS else ""),
                     score=r.score,
-                    bm25_score=r.first_stage_score,
-                    bm25_rank=r.first_stage_rank,
+                    first_stage_score=r.first_stage_score,
+                    first_stage_rank=r.first_stage_rank,
                     rerank_score=r.rerank_score,
+                    relevance=None if rel is None else round(rel, 4),
                 )
-                for r in results
-            ],
+            )
+        return SearchResponse(
+            query=q,
+            retriever=p.retriever.name,
+            k=k,
+            candidates=candidates if reranked else k,
+            reranked=reranked,
+            filtered_out=len(results) - len(out),
+            results=out,
             timings=TimingsOut(**t.__dict__),
         )
 

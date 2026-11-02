@@ -49,11 +49,35 @@ fingerprints: `results/benchmarks/`.
 - Hybrid fusion raises recall@1000 over BM25 significantly (+0.037, p = 0.008), but
   its own top 10 is worse than dense alone: RRF weights a much weaker BM25 equally.
   It is a candidate generator, not a ranker.
-- Better candidates help the reranker (+0.015 over BM25 candidates on both sets),
-  but on DL19 alone that is not significant (p = 0.17, n = 43): use the pooled
-  DL19+DL20 test (`compare_runs.py --sets dl19 dl20`).
+- Better candidates help the reranker: +0.015 nDCG@10 over BM25 candidates, same
+  direction on both sets, but borderline. Pooled DL19+DL20 (n = 97): dense
+  candidates p = 0.061, hybrid p = 0.043; with a Bonferroni correction for the two
+  comparisons (alpha = 0.025) neither is significant.
 - The bi-encoder was trained on MS MARCO, so dense retrieval is in-domain here;
   BM25's value is expected to be larger out of domain (BEIR).
+
+![Quality vs latency by reranking depth](docs/tradeoff_dl19.png)
+
+*Each curve is one pipeline; each point is how many candidates the reranker sees.
+Dense candidates (red) reach the BM25 pipelines' best quality at a fraction of the
+latency. Same chart for DL20: [docs/tradeoff_dl20.png](docs/tradeoff_dl20.png).*
+
+**Operating points: quality vs latency** (fp16 reranker on the iGPU; mean of DL19 and DL20 nDCG@10)
+
+| Pipeline | Mean nDCG@10 | Rerank p50 |
+|---|---:|---:|
+| BM25 → reranker @100, PyTorch fp32 on CPU (starting point) | 0.743 | 2,059 ms |
+| BM25 → reranker @100 | 0.743 | 860 ms |
+| **Dense → reranker @20** | **0.744** | **210 ms** |
+| Dense → reranker @30 | 0.749 | 309 ms |
+| Dense → reranker @50 | 0.758 | 555 ms |
+| Dense → reranker @100 | 0.758 | 840 ms |
+
+Dense candidates put relevant passages near the top, so reranking 20 matches the
+starting pipeline's quality at ~9x lower latency (first stage: ~16 ms with HNSW,
+which returns 99.6% of exact search's top 10). Beyond 50 candidates there is no
+gain. Depths were not tuned on held-out queries, so the 20/30 points are the safe
+claims (their advantage is latency, not a test-set peak).
 
 **Reranker latency per query** (100 candidates unless noted; p50)
 
@@ -133,6 +157,27 @@ Backends: `es`, `local`, `dense`, `hybrid-es`, `hybrid-local`. Reranker via
 `RERANK_MODEL` (HF id, local checkpoint, ONNX export dir, or `none`),
 `RERANK_QUANTIZE=int8`, `RERANK_ONNX_VARIANT=int8|fp32`.
 
+### Load testing the API
+
+```bat
+:: terminal 1
+set SEARCH_BACKEND=dense
+set DENSE_INDEX=hnsw
+set RERANK_MODEL=models\ms-marco-MiniLM-L-6-v2-onnx
+set RERANK_ONNX_VARIANT=fp16
+set RERANK_DEVICE=dml
+set SEARCH_CANDIDATES=20
+uvicorn searchengine.api:app --port 8000
+
+:: terminal 2
+python scripts/load_test.py --collection msmarco-100k --concurrency 1 2 4 8 --requests 60
+```
+
+Real benchmark queries over HTTP at increasing concurrency: client p50/p95/p99,
+throughput, and server-side stage times. On one machine, concurrent requests
+queue for the same GPU/cores, so latency grows with concurrency while throughput
+plateaus at the system's capacity. Results: `results/loadtests/`.
+
 ### Benchmarking across machines
 
 ```bat
@@ -195,9 +240,10 @@ searchengine/
   factory.py     builds retrievers / doc sources / rerankers / pipelines from settings
 scripts/         prepare_data, build_index, evaluate, rerank, compare_runs,
                  encode_corpus, build_dense_index, export_onnx, depth_sweep, plot_tradeoff,
-                 benchmark, compare_benchmarks, check_analyzer, check_bm25_parity, es_latency_probe
+                 benchmark, compare_benchmarks, load_test, check_analyzer, check_bm25_parity, es_latency_probe
 tests/           unit tests incl. tiny randomly initialized models (no downloads)
-results/         committed benchmark results from each machine
+results/         committed benchmark and load-test results from each machine
+docs/            charts used in this README
 ```
 
 ## Design decisions and findings

@@ -132,7 +132,7 @@ def main() -> None:
         row.update({"p50_ms": lat.get("p50_ms"), "p95_ms": lat.get("p95_ms")})
         rows.append(row)
         cells = "  ".join(f"{quality[depth][e][pm[e]]:>{len(e) + len(pm[e]) + 1}.4f}" for e in sets)
-        lat_s = f"{lat['p50_ms']:8.0f} / {lat['p95_ms']:.0f}" if lat else ("  (BM25 only)" if depth == 0 else "")
+        lat_s = f"{lat['p50_ms']:8.0f} / {lat['p95_ms']:.0f}" if lat else ("  (first stage only, no reranking)" if depth == 0 else "")
         print(f"{depth:>5}  {cells}   {lat_s}")
 
     out_dir = s.runs_dir / coll.name / "sweeps"
