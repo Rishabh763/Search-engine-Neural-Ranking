@@ -23,6 +23,9 @@ Engineering details that affect latency:
 - Pairs are sorted by length before batching, so similar lengths share a batch
   and less compute is wasted on padding. Scores are restored to input order.
 - fp16 on GPU; inference_mode() on any device (no autograd bookkeeping).
+- Optional dynamic int8 on CPU (quantize="int8"). For ONNX Runtime variants see onnx_ce.py.
+  Which CPU variant is fastest depends on the machine: measured on one AVX-512 Xeon,
+  torch fp32 1.0x, ONNX fp32 0.47x, ONNX int8 1.0x, torch int8 1.8x.
 """
 
 from __future__ import annotations
@@ -49,6 +52,26 @@ def resolve_device(device: str = "auto") -> str:
     return "cpu"
 
 
+def _dynamic_int8(model):
+    """PyTorch dynamic quantization: nn.Linear weights -> int8, activations quantized per batch.
+
+    Uses fbgemm/x86 int8 kernels. Measured 1.8x faster than fp32 on an AVX-512 Xeon
+    for a MiniLM-L6-shaped model; the speedup on other CPUs must be measured
+    (scripts/benchmark.py), not assumed.
+    """
+    import warnings
+
+    import torch
+
+    try:
+        from torch.ao.quantization import quantize_dynamic
+    except ImportError:  # very old torch
+        from torch.quantization import quantize_dynamic
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # deprecation notice pointing to torchao
+        return quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+
+
 class CrossEncoderReranker(Reranker):
     def __init__(
         self,
@@ -57,6 +80,7 @@ class CrossEncoderReranker(Reranker):
         max_length: int = 512,
         batch_size: int = 64,
         fp16: bool | None = None,
+        quantize: str | None = None,
     ):
         import torch
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
@@ -69,6 +93,14 @@ class CrossEncoderReranker(Reranker):
         t0 = time.perf_counter()
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         model = AutoModelForSequenceClassification.from_pretrained(model_name_or_path)
+        self.quantize = quantize
+        if quantize not in (None, "int8"):
+            raise ValueError("quantize must be None or 'int8'")
+        if quantize == "int8":
+            if self.device != "cpu":
+                raise ValueError("dynamic int8 quantization is a CPU optimization; use fp16 on GPU")
+            model = _dynamic_int8(model.eval())
+            self.name = f"ce-int8:{PurePath(model_name_or_path).name}"
         self.fp16 = (self.device == "cuda") if fp16 is None else fp16
         if self.fp16:
             model = model.half()
@@ -84,6 +116,7 @@ class CrossEncoderReranker(Reranker):
             "model": self.model_name,
             "device": self.device,
             "fp16": self.fp16,
+            "quantize": self.quantize,
             "max_length": self.max_length,
             "batch_size": self.batch_size,
             "params_millions": round(n_params / 1e6, 1),

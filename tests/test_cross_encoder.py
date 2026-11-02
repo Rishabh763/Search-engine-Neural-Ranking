@@ -13,32 +13,11 @@ import pytest
 torch = pytest.importorskip("torch")
 transformers = pytest.importorskip("transformers")
 
-WORDS = "the quick brown fox dog jumps over lazy what is a cross encoder search engine fast".split()
-
-
 @pytest.fixture(scope="module")
-def tiny_model_dir(tmp_path_factory):
-    from transformers import BertConfig, BertForSequenceClassification, BertTokenizer
-
-    d = tmp_path_factory.mktemp("tiny-ce")
-    vocab = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"] + WORDS
-    (d / "vocab.txt").write_text("\n".join(vocab), encoding="utf-8")
-    tok = BertTokenizer(vocab_file=str(d / "vocab.txt"))
-    torch.manual_seed(0)
-    cfg = BertConfig(
-        vocab_size=len(vocab), hidden_size=32, num_hidden_layers=2, num_attention_heads=2,
-        intermediate_size=64, num_labels=1,
-    )
-    BertForSequenceClassification(cfg).save_pretrained(d)
-    tok.save_pretrained(d)
-    return str(d)
-
-
-@pytest.fixture(scope="module")
-def reranker(tiny_model_dir):
+def reranker(tiny_ce_dir):
     from searchengine.ranking.cross_encoder import CrossEncoderReranker
 
-    return CrossEncoderReranker(tiny_model_dir, device="cpu", batch_size=2)
+    return CrossEncoderReranker(tiny_ce_dir, device="cpu", batch_size=2)
 
 
 PASSAGES = ["the quick brown fox", "lazy dog", "a cross encoder search engine jumps over the lazy dog", "fast"]
@@ -69,7 +48,18 @@ def test_truncation_handles_long_passages(reranker):
     assert np.isfinite(s).all()
 
 
-def test_info(reranker, tiny_model_dir):
+def test_info(reranker, tiny_ce_dir):
     info = reranker.info()
     assert info["device"] == "cpu" and info["fp16"] is False
-    assert reranker.name == "ce:" + os.path.basename(tiny_model_dir)
+    assert reranker.name == "ce:" + os.path.basename(tiny_ce_dir)
+
+
+def test_torch_dynamic_int8_variant(tiny_ce_dir):
+    from searchengine.ranking.cross_encoder import CrossEncoderReranker
+
+    q8 = CrossEncoderReranker(tiny_ce_dir, device="cpu", quantize="int8")
+    assert q8.name.startswith("ce-int8:") and q8.info()["quantize"] == "int8"
+    s = q8.score("what is a fox", PASSAGES)
+    assert s.shape == (4,) and np.isfinite(s).all()
+    with pytest.raises(ValueError):
+        CrossEncoderReranker(tiny_ce_dir, device="cpu", quantize="int4")

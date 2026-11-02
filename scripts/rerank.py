@@ -20,6 +20,7 @@ import numpy as np
 import _bootstrap  # noqa: F401
 
 from searchengine.config import get_settings
+from searchengine.envinfo import environment_info, short_label
 from searchengine.data.collection import Collection
 from searchengine.data.registry import spec_or_default
 from searchengine.docstore import DocStore
@@ -30,6 +31,11 @@ from searchengine.pipeline import rerank_run
 from searchengine.ranking.cross_encoder import DEFAULT_MODEL
 
 
+def reranker_label(name: str) -> str:
+    """'ce:X' -> 'X' (plain PyTorch fp32); 'onnx-int8:X' -> 'onnx-int8-X'; 'ce-int8:X' -> 'ce-int8-X'."""
+    return name.split(":", 1)[1] if name.startswith("ce:") else name.replace(":", "-")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--collection", required=True)
@@ -37,9 +43,11 @@ def main() -> None:
     p.add_argument("--eval-sets", nargs="*", default=None)
     p.add_argument("--depth", type=int, default=100, help="candidates reranked per query")
     p.add_argument("--model", default=DEFAULT_MODEL)
-    p.add_argument("--device", default="auto", help="auto | cpu | cuda | mps")
+    p.add_argument("--device", default="auto", help="auto | cpu | cuda | mps; ONNX models also: dml (DirectML GPU)")
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--max-length", type=int, default=512)
+    p.add_argument("--quantize", choices=["int8"], default=None, help="PyTorch dynamic int8 (CPU)")
+    p.add_argument("--onnx-variant", choices=["int8", "fp32", "fp16"], default="int8", help="when --model is an ONNX export dir")
     p.add_argument("--max-queries", type=int, default=None, help="evaluate only the first N queries per set")
     p.add_argument("--tag", default=None)
     args = p.parse_args()
@@ -47,10 +55,12 @@ def main() -> None:
     s = get_settings()
     coll = Collection.from_name(args.collection, s.data_dir)
     docs = DocStore.open(coll, s.index_dir)
-    reranker = build_reranker(args.model, args.device, args.batch_size, args.max_length)
+    reranker = build_reranker(args.model, args.device, args.batch_size, args.max_length, args.quantize, args.onnx_variant)
     info = reranker.info()
+    env = environment_info()
+    print(f"machine: {short_label(env)}")
     print(f"reranker: {info}  (loaded in {reranker.load_seconds:.1f}s)")
-    tag = args.tag or f"{args.first_stage}+{reranker.name.split(':', 1)[-1]}@{args.depth}"
+    tag = args.tag or f"{args.first_stage}+{reranker_label(reranker.name)}@{args.depth}"
 
     for es_name in args.eval_sets or coll.eval_set_names:
         spec = spec_or_default(es_name)
@@ -99,6 +109,7 @@ def main() -> None:
             "first_stage_metrics": base.mean,
             "pairs_per_second": round(len(queries) * args.depth / secs, 1),
             "latency": latency,
+            "environment": env,
             "per_query": res.per_query,
         }
         with open(run_dir / f"{tag}.json", "w", encoding="utf-8", newline="\n") as f:

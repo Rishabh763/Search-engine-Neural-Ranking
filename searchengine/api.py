@@ -7,8 +7,13 @@ Then open http://127.0.0.1:8000/docs for the interactive Swagger UI, or:
 
 Configuration (environment variables):
     SEARCH_COLLECTION   collection name                (default msmarco-100k)
-    SEARCH_BACKEND      es | local                     (default es)
-    RERANK_MODEL        HF model id/path, or "none"    (default cross-encoder/ms-marco-MiniLM-L-6-v2)
+    SEARCH_BACKEND      es | local | dense | hybrid-es | hybrid-local   (default es)
+    DENSE_MODEL         bi-encoder for dense/hybrid    (default msmarco-MiniLM-L6-cos-v5)
+    DENSE_INDEX         flat | hnsw | ivfpq            (default flat)
+    RERANK_MODEL        HF model id/path, ONNX export dir, or "none"
+                                                       (default cross-encoder/ms-marco-MiniLM-L-6-v2)
+    RERANK_QUANTIZE     int8 = PyTorch dynamic int8 on CPU (default off)
+    RERANK_ONNX_VARIANT int8 | fp32, when RERANK_MODEL is an ONNX export dir (default int8)
     RERANK_DEVICE       auto | cpu | cuda | mps        (default auto)
 
 Endpoints are plain `def` (not `async def`): retrieval and model inference are
@@ -35,7 +40,7 @@ class ResultOut(BaseModel):
     title: str
     snippet: str
     score: float
-    bm25_score: float
+    bm25_score: float  # first-stage score (BM25, dense cosine, or RRF, by backend)
     bm25_rank: int
     rerank_score: float | None
 
@@ -69,7 +74,12 @@ def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None)
             collection = os.environ.get("SEARCH_COLLECTION", "msmarco-100k")
             backend = os.environ.get("SEARCH_BACKEND", "es")
             model = os.environ.get("RERANK_MODEL", DEFAULT_MODEL)
-            state["pipeline"] = build_pipeline(collection, backend, model, os.environ.get("RERANK_DEVICE", "auto"))
+            state["pipeline"] = build_pipeline(
+                collection, backend, model, os.environ.get("RERANK_DEVICE", "auto"),
+                quantize=os.environ.get("RERANK_QUANTIZE") or None,
+                onnx_variant=os.environ.get("RERANK_ONNX_VARIANT", "int8"),
+                dense_index=os.environ.get("DENSE_INDEX", "flat"),
+            )
             state["meta"] = {"collection": collection, "backend": backend}
             # Warm up so the first real request doesn't pay model/JIT/cache start-up.
             state["pipeline"].search("warm up query", k=10, candidates=20)

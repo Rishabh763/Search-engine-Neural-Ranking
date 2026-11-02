@@ -56,4 +56,6 @@ def write_run(run: Run, path: Path, tag: str = "run", depth: int | None = None) 
             if depth is not None:
                 ranked = ranked[:depth]
             for rank, docid in enumerate(ranked, start=1):
-                f.write(f"{qid} Q0 {docid} {rank} {scores[docid]:.6f} {tag}\n")
+                # repr() keeps full float precision: rounding to a few decimals turns
+                # close scores into ties and silently changes the ranking on re-read.
+                f.write(f"{qid} Q0 {docid} {rank} {float(scores[docid])!r} {tag}\n")

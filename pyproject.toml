@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "searchengine"
-version = "0.2.0"
+version = "0.3.0"
 description = "Large-scale hybrid retrieval with neural reranking (BM25 + dense + cross-encoder)"
 authors = [{ name = "Rishabh Singh" }]
 requires-python = ">=3.10"
@@ -13,6 +13,7 @@ dependencies = [
     "scipy>=1.11",
     "PyStemmer>=2.2",
     "nltk>=3.8",
+    "psutil>=5.9",
     "tqdm>=4.66",
     "ir_datasets>=0.5.6",
     "elasticsearch>=8.13,<9",
@@ -23,6 +24,13 @@ dev = ["pytest>=8", "pytrec_eval-terrier>=0.5.6"]
 # Install torch first if you want a CUDA build (see README); otherwise pip picks the CPU build.
 neural = ["torch>=2.2", "transformers>=4.40"]
 api = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "httpx>=0.27"]
+dense = ["sentence-transformers>=3.0", "faiss-cpu>=1.8"]
+onnx = ["onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.1"]
+# Windows GPUs incl. AMD/Intel integrated graphics. Replaces onnxruntime: never install both.
+onnx-dml = ["onnx>=1.16", "onnxruntime-directml>=1.18", "onnxscript>=0.1"]
+viz = ["matplotlib>=3.8"]
+all = ["searchengine[dev,neural,api,dense,onnx,viz]"]
+all-dml = ["searchengine[dev,neural,api,dense,onnx-dml,viz]"]
 
 [tool.setuptools.packages.find]
 include = ["searchengine*"]

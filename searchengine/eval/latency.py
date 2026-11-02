@@ -13,7 +13,7 @@ from typing import Callable
 import numpy as np
 
 
-def measure_latency(search_fn: Callable[[str], object], queries: list[str], warmup: int = 10) -> dict[str, float]:
+def measure_latency(search_fn: Callable[[str], object], queries: list[str], warmup: int = 20) -> dict[str, float]:
     if not queries:
         return {}
     for q in queries[:warmup]:

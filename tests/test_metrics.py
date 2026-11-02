@@ -91,3 +91,14 @@ def test_matches_pytrec_eval(seed, threshold):
     ours_rr = evaluate(run, qrels, ["mrr@10"], rel_threshold=threshold).per_query["mrr@10"]
     for q in qrels:
         assert ours_rr[q] == pytest.approx(ref_rr[q]["recip_rank"], abs=1e-9)
+
+
+def test_run_file_roundtrip_preserves_ranking_of_close_scores(tmp_path):
+    from searchengine.eval.trec import read_run, write_run
+
+    # Scores closer than 1e-6 apart: rounding on write would create ties and reorder.
+    run = {"q": {f"d{i}": -0.0529 + i * 3e-8 for i in range(20)}}
+    write_run(run, tmp_path / "r.run")
+    back = read_run(tmp_path / "r.run")
+    assert rank_documents(back["q"]) == rank_documents(run["q"])
+    assert back["q"] == run["q"]
