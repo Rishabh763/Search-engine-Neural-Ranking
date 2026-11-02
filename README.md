@@ -174,9 +174,23 @@ python scripts/load_test.py --collection msmarco-100k --concurrency 1 2 4 8 --re
 ```
 
 Real benchmark queries over HTTP at increasing concurrency: client p50/p95/p99,
-throughput, and server-side stage times. On one machine, concurrent requests
-queue for the same GPU/cores, so latency grows with concurrency while throughput
-plateaus at the system's capacity. Results: `results/loadtests/`.
+throughput, and server-side stage times. Results: `results/loadtests/`.
+
+Measured (dense HNSW → MiniLM-L6 ONNX fp16 on the Radeon iGPU, 20 candidates,
+load generator on the same laptop):
+
+| Concurrent requests | Throughput | p50 | p95 | Server rerank time |
+|---:|---:|---:|---:|---:|
+| 1 | 3.1 req/s | 314 ms | 403 ms | 291 ms |
+| 2 | 3.5 req/s | 549 ms | 732 ms | 536 ms |
+| 4 | 3.1 req/s | 1,255 ms | 1,533 ms | 1,229 ms |
+| 8 | 3.2 req/s | 2,537 ms | 2,903 ms | 2,394 ms |
+
+Throughput is flat at ~3.2 req/s while rerank time grows ~linearly with
+concurrency: requests queue for the single GPU (DirectML sessions allow one `Run`
+at a time, enforced by a lock). Retrieval stays at 15-26 ms. The next lever is
+cross-request batching: each GPU call has ~80 ms fixed overhead, so merging the
+candidates of several waiting requests into one call should raise capacity.
 
 ### Benchmarking across machines
 
@@ -273,6 +287,10 @@ docs/            charts used in this README
 - **One ES shard** keeps BM25 statistics exact; **subsets keep every judged
   passage**; **official metric conventions per dataset**; **metrics match
   `trec_eval -c`**; **paired randomization tests** for every comparison.
+
+## Contributing
+
+Commit messages follow [gitmoji](https://gitmoji.dev/); see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Author
 
