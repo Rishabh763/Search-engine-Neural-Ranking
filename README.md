@@ -21,25 +21,58 @@ Query
 |---|---|---|
 | 1 | Data pipeline, BM25 (Elasticsearch + local reference, score-level parity), evaluation harness | **done** |
 | 2 | Cross-encoder reranking, FastAPI search endpoint | **done** |
-| 3 | Dense retrieval (FAISS flat / HNSW / IVF-PQ), RRF hybrid fusion | **built**, measuring |
-| 5 | Latency: depth sweep, ONNX + int8, PyTorch int8, cross-machine benchmarks | **built**, measuring |
-| 4 | Cross-encoder fine-tuning with BM25 hard negatives | planned |
+| 3 | Dense retrieval (FAISS flat / HNSW / IVF-PQ), RRF hybrid fusion | **done** on 100K subset |
+| 5 | Latency: depth sweeps, ONNX fp32/fp16/int8, PyTorch int8, DirectML GPU, cross-machine benchmarks | **done** on one laptop |
+| 4 | Cross-encoder fine-tuning with BM25 hard negatives | planned (needs an NVIDIA GPU or cloud GPU) |
+| | Full 8.8M-passage corpus | planned (GPU machine for encoding) |
 
-## Results so far
+## Results
 
 All on the 100K-passage subset (`msmarco-100k`: every judged passage for the
-sampled queries plus a random fill). TREC DL nDCG on this subset is close to
-full-corpus values because all judged passages are kept; dev MRR is inflated and
-used for relative comparisons only.
+sampled queries plus a random fill). TREC DL nDCG here is close to full-corpus
+values because all judged passages are kept. Machine: AMD Ryzen 5 5500U laptop
+(6 cores), integrated Radeon GPU via DirectML. Full reports with hardware
+fingerprints: `results/benchmarks/`.
 
-| System | DL19 nDCG@10 | DL20 nDCG@10 | DL19 R@1000 | Rerank latency p50 |
+**Retrieval pipelines** (reranker: MiniLM-L6 cross-encoder, ONNX fp16 on the iGPU, 100 candidates)
+
+| Pipeline | DL19 nDCG@10 | DL20 nDCG@10 | DL19 R@100 | DL19 R@1000 |
 |---|---:|---:|---:|---:|
-| BM25 (Elasticsearch, k1=0.9 b=0.4) | 0.482 | 0.477 | 0.912 | n/a (first stage ~7 ms at k=100) |
-| BM25 → MiniLM-L6 cross-encoder @100 | **0.752** | **0.733** | 0.912 | 2,059 ms (6-core laptop CPU, PyTorch fp32) |
+| BM25 (Elasticsearch, k1=0.9 b=0.4) | 0.482 | 0.477 | 0.657 | 0.912 |
+| Dense (msmarco-MiniLM-L6-cos-v5, exact) | 0.720 | 0.669 | 0.716 | 0.920 |
+| Hybrid RRF (BM25 + dense) | 0.675 | 0.612 | **0.745** | **0.949** |
+| BM25 → cross-encoder | 0.751 | 0.735 | | |
+| Dense → cross-encoder | **0.767** | 0.748 | | |
+| Hybrid → cross-encoder | 0.766 | **0.749** | | |
 
-The reranking gain is significant (DL19: +0.270, 95% CI [+0.20, +0.34], p < 1e-4,
-paired randomization test). Full-corpus sanity references (Anserini BM25):
-dev MRR@10 ≈ 0.184, DL19 ≈ 0.506, DL20 ≈ 0.480; MiniLM-L6 model card ≈ 0.743 on DL19.
+- Reranking BM25 candidates: +0.270 nDCG@10 on DL19 (95% CI [+0.20, +0.34], p < 1e-4).
+- Hybrid fusion raises recall@1000 over BM25 significantly (+0.037, p = 0.008), but
+  its own top 10 is worse than dense alone: RRF weights a much weaker BM25 equally.
+  It is a candidate generator, not a ranker.
+- Better candidates help the reranker (+0.015 over BM25 candidates on both sets),
+  but on DL19 alone that is not significant (p = 0.17, n = 43): use the pooled
+  DL19+DL20 test (`compare_runs.py --sets dl19 dl20`).
+- The bi-encoder was trained on MS MARCO, so dense retrieval is in-domain here;
+  BM25's value is expected to be larger out of domain (BEIR).
+
+**Reranker latency per query** (100 candidates unless noted; p50)
+
+| Variant | Device | DL19 nDCG@10 | Latency |
+|---|---|---:|---:|
+| PyTorch fp32 | CPU | 0.752 | 2,059 ms |
+| PyTorch dynamic int8 | CPU | 0.747 | 1,835 ms |
+| ONNX int8 (ORT 1.31) | CPU | 0.748 | 1,409 ms |
+| ONNX fp16 | Radeon iGPU (DirectML) | 0.751 | 916 ms |
+| ONNX fp16, 50 candidates | Radeon iGPU (DirectML) | 0.735 | 566 ms |
+| ONNX fp16, 30 candidates | Radeon iGPU (DirectML) | 0.681 | 345 ms |
+
+The best variant depends on the hardware: on an AVX-512 Xeon, PyTorch int8 was
+fastest (1.8x) and ONNX fp32 slowest (0.47x); on this Zen 2 laptop (no VNNI),
+PyTorch int8 gives only 1.12x and ONNX int8 1.46x. ONNX Runtime 1.24 (the
+DirectML build) runs the CPU path ~20% slower than 1.31.
+
+Full-corpus sanity references: Anserini BM25 dev MRR@10 ≈ 0.184, DL19 ≈ 0.506,
+DL20 ≈ 0.480; MiniLM-L6 model card ≈ 0.743 on DL19.
 
 ## Quickstart (Windows; same commands on Linux/macOS)
 
@@ -85,7 +118,7 @@ python scripts/build_dense_index.py --collection msmarco-100k --type hnsw
 python scripts/build_dense_index.py --collection msmarco-100k --type ivfpq
 python scripts/evaluate.py --collection msmarco-100k --retriever dense --dense-index flat
 python scripts/evaluate.py --collection msmarco-100k --retriever hybrid-es
-python scripts/compare_runs.py runs\msmarco-100k\dl19\bm25-es.json "runs\msmarco-100k\dl19\rrf(bm25-es+dense-flat:msmarco-MiniLM-L6-cos-v5).json" --metric recall@1000
+python scripts/compare_runs.py runs\msmarco-100k\dl19\bm25-es.json "runs\msmarco-100k\dl19\rrf(bm25-es+dense-flat-msmarco-MiniLM-L6-cos-v5).json" --metric recall@1000
 ```
 
 ### Search API
@@ -114,7 +147,16 @@ go to `results/benchmarks/<hostname>_<time>.json` with the hardware fingerprint
 (CPU, cores, GPU, battery state, library versions). Commit them; run the same
 command on another machine and `compare_benchmarks.py` prints one table.
 
-### GPU machines
+### AMD / Intel GPUs on Windows (DirectML)
+
+```bat
+pip uninstall -y onnxruntime
+pip install onnxruntime-directml          :: from now on: pip install -e ".[all-dml]"
+python scripts/export_onnx.py             :: re-export: adds the fp16 variant
+python scripts/rerank.py ... --model models/ms-marco-MiniLM-L-6-v2-onnx --onnx-variant fp16 --device dml
+```
+
+### NVIDIA GPU machines
 
 Install the CUDA build of PyTorch *before* `pip install -e ".[all]"`. RTX 50-series
 (Blackwell) GPUs need CUDA 12.8+ builds:

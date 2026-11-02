@@ -32,17 +32,20 @@ def rrf_fuse(rankings: list[dict[str, float]], k: int = 60) -> dict[str, float]:
 
 
 class RRFHybrid(Retriever):
-    def __init__(self, retrievers: list[Retriever], k_rrf: int = 60, depth: int = 1000):
+    def __init__(self, retrievers: list[Retriever], k_rrf: int = 60, depth: int = 1000, online_depth: int = 200):
         self.retrievers = retrievers
         self.k_rrf = k_rrf
-        self.depth = depth
+        self.depth = depth  # per-retriever depth for offline evaluation (recall@1000 needs 1000)
+        # Live queries need far fewer: measured 78 ms at depth 1000 vs ~9 + 37 ms for the parts.
+        # A doc ranked below 200 by a retriever adds < 1/(60+200) to its fused score anyway.
+        self.online_depth = online_depth
         self.name = "rrf(" + "+".join(r.name for r in retrievers) + ")"
         # Components are I/O-bound (Elasticsearch) or release the GIL (torch, FAISS),
         # so running them concurrently cuts single-query latency to ~max instead of sum.
         self._pool = ThreadPoolExecutor(max_workers=len(retrievers))
 
     def search(self, query: str, k: int = 1000) -> list[Hit]:
-        depth = max(k, self.depth)
+        depth = max(k, self.online_depth)
         futures = [self._pool.submit(r.search, query, depth) for r in self.retrievers]
         rankings = [{h.doc_id: h.score for h in f.result()} for f in futures]
         fused = rrf_fuse(rankings, self.k_rrf)

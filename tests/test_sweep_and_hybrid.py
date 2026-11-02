@@ -53,3 +53,19 @@ def test_hybrid_single_and_batch_agree():
     assert len(h.search("q", k=2)) == 2
     with pytest.raises(AttributeError):
         h.get_documents(["d1"])  # neither component serves text
+
+
+def test_hybrid_online_depth_limits_component_fetch():
+    calls = []
+
+    class Spy(Fixed):
+        def search(self, query, k=1000):
+            calls.append(k)
+            return super().search(query, k)
+
+    h = RRFHybrid([Spy("a", [f"d{i}" for i in range(500)]), Spy("b", ["d1"])], depth=1000, online_depth=200)
+    h.search("q", k=100)
+    assert calls == [200, 200]  # not 1000
+    calls.clear()
+    h.search("q", k=300)
+    assert calls == [300, 300]  # never below k
