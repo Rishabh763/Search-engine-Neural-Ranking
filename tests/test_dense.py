@@ -101,17 +101,29 @@ def test_faiss_indexes_recall_vs_exact(clustered_store, kind, floor):
     assert r >= floor, (kind, r, params)  # ivfpq: 48-d -> 8 bytes is heavy compression
 
 
-def test_recall_vs_exact_is_tie_aware(encoded):
-    """The tiny random encoder maps every passage to the same vector: all scores tie.
-    Id overlap would report <1; tie-aware recall correctly reports 1."""
+class ConstantEncoder(ClusteredEncoder):
+    """Every passage gets the same vector, so every score ties: an explicit tie scenario."""
+
+    def encode_passages(self, texts, progress=False):
+        v = np.ones(self.dim, dtype=np.float32) / np.sqrt(self.dim)
+        return np.tile(v, (len(texts), 1))
+
+
+def test_recall_vs_exact_is_tie_aware(toy_collection, tmp_path):
+    """All scores tie: any 10 ids are an equally correct top 10. Plain id overlap with the
+    exact search's arbitrary tie-break would report ~k/N; tie-aware recall reports 1."""
     from searchengine.dense.index import recall_vs_exact
 
-    root, enc, *_ = encoded
-    store = EmbeddingStore(root)
-    Q = enc.encode_queries(["the quick fox", "lazy dog"])
+    coll, *_ = toy_collection
+    enc = ConstantEncoder()
+    encode_collection(coll, enc, tmp_path / "const", shard_size=250, log=lambda m: None, progress=False)
+    store = EmbeddingStore(tmp_path / "const")
+    Q = ClusteredEncoder().encode_queries(["the quick fox", "lazy dog"])
     exact_s, exact_i = exact_topk(store, Q, 10)
     other = np.roll(np.arange(store.n), 7)[None, :10].repeat(2, 0)  # different ids, same (tied) scores
     assert recall_vs_exact(store, Q, exact_s, other, 10) == pytest.approx(1.0)
+    overlap = np.mean([len(set(a) & set(b)) / 10 for a, b in zip(exact_i, other)])
+    assert overlap < 1.0  # what plain id overlap would have (wrongly) reported
 
 
 def test_dense_retriever_and_factory(encoded, tmp_path, monkeypatch):

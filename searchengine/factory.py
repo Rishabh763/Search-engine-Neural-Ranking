@@ -25,7 +25,7 @@ def build_retriever(
     rrf_k: int = 60,
     fusion_depth: int = 1000,
 ):
-    """backend: local | es | dense | hybrid-es | hybrid-local."""
+    """backend: local | es | dense | dense-exact | hybrid-es | hybrid-local."""
     if backend == "local":
         from searchengine.retrieval.bm25_local import LocalBM25
 
@@ -36,13 +36,20 @@ def build_retriever(
 
         return ElasticsearchBM25(make_client(s.es_url), index_name or coll.name)
     if backend == "dense":
-        from searchengine.dense.encoder import DEFAULT_DENSE_MODEL, model_slug
+        from searchengine.dense.encoder import default_dense_model, model_slug
         from searchengine.dense.index import dense_dir
         from searchengine.retrieval.dense import DenseRetriever
 
-        model = dense_model or os.environ.get("DENSE_MODEL", DEFAULT_DENSE_MODEL)
+        model = dense_model or default_dense_model()
         root = dense_dir(s.index_dir, coll.name, model_slug(model))
         return DenseRetriever.load(root, dense_index, device=device, nprobe=nprobe, ef_search=ef_search)
+    if backend == "dense-exact":
+        from searchengine.dense.encoder import default_dense_model, model_slug
+        from searchengine.dense.index import dense_dir
+        from searchengine.retrieval.dense import DenseExactTorch
+
+        model = dense_model or default_dense_model()
+        return DenseExactTorch.load(dense_dir(s.index_dir, coll.name, model_slug(model)), device=device)
     if backend in ("hybrid-es", "hybrid-local"):
         from searchengine.retrieval.hybrid import RRFHybrid
 

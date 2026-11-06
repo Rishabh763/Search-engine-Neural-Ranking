@@ -61,7 +61,13 @@ def _tiny_bert(d, num_labels=None, extra_words=()):
 
     vocab = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"] + list(dict.fromkeys([*TINY_WORDS, *extra_words]))
     (d / "vocab.txt").write_text("\n".join(vocab), encoding="utf-8")
-    tok = BertTokenizer(vocab_file=str(d / "vocab.txt"))
+    try:  # transformers >= 5 takes `vocab=` and silently ignores the old `vocab_file=`
+        tok = BertTokenizer(vocab=str(d / "vocab.txt"))
+    except TypeError:  # transformers 4.x
+        tok = BertTokenizer(vocab_file=str(d / "vocab.txt"))
+    # Guard: a tokenizer that only knows the special tokens maps every word to [UNK],
+    # silently making every passage look identical to the model.
+    assert tok.vocab_size == len(vocab), f"tokenizer vocab {tok.vocab_size} != {len(vocab)}"
     torch.manual_seed(0)
     cfg = BertConfig(vocab_size=len(vocab), hidden_size=32, num_hidden_layers=2, num_attention_heads=2,
                      intermediate_size=64, num_labels=num_labels or 1)
@@ -74,6 +80,14 @@ def _tiny_bert(d, num_labels=None, extra_words=()):
 def tiny_ce_dir(tmp_path_factory):
     """Tiny randomly initialized cross-encoder (BERT + 1-logit head)."""
     return _tiny_bert(tmp_path_factory.mktemp("tiny-ce"), num_labels=1)
+
+
+@pytest.fixture(scope="session")
+def tiny_ce_toy_dir(tmp_path_factory, toy_collection):
+    """Tiny cross-encoder whose vocabulary covers the toy corpus (so training has signal)."""
+    _, docs, _, _ = toy_collection
+    words = sorted({w for d in docs for w in d.text.split()})
+    return _tiny_bert(tmp_path_factory.mktemp("tiny-ce-toy"), num_labels=1, extra_words=words)
 
 
 @pytest.fixture(scope="session")

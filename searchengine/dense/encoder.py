@@ -38,6 +38,14 @@ KNOWN_MODELS: dict[str, dict] = {
 }
 
 
+def default_dense_model() -> str:
+    """The bi-encoder every script uses unless told otherwise: DENSE_MODEL env, else the built-in default.
+    One source of truth, so encoding, indexing, evaluation and serving always agree."""
+    import os
+
+    return os.environ.get("DENSE_MODEL") or DEFAULT_DENSE_MODEL
+
+
 def model_slug(model_name: str) -> str:
     return PurePath(model_name).name
 

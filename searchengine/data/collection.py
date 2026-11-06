@@ -120,3 +120,17 @@ class Collection:
 
     def qrels(self, eval_set: str) -> Qrels:
         return read_qrels(self._evalset_dir(eval_set) / "qrels.txt")
+
+    # ---- training split (written by scripts/prepare_train.py) ----
+
+    def _train_dir(self) -> Path:
+        d = self.root / "train"
+        if not (d / "queries.tsv").exists():
+            raise FileNotFoundError(f"No training split in {self.root}: run scripts/prepare_train.py first")
+        return d
+
+    def train_queries(self) -> Queries:
+        return read_queries(self._train_dir() / "queries.tsv")
+
+    def train_qrels(self) -> Qrels:
+        return read_qrels(self._train_dir() / "qrels.txt")

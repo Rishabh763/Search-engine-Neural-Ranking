@@ -23,8 +23,8 @@ Query
 | 2 | Cross-encoder reranking, FastAPI search endpoint | **done** |
 | 3 | Dense retrieval (FAISS flat / HNSW / IVF-PQ), RRF hybrid fusion | **done** on 100K subset |
 | 5 | Latency: depth sweeps, ONNX fp32/fp16/int8, PyTorch int8, DirectML GPU, cross-machine benchmarks | **done** on one laptop |
-| 4 | Cross-encoder fine-tuning with BM25 hard negatives | planned (needs an NVIDIA GPU or cloud GPU) |
-| | Full 8.8M-passage corpus | planned (GPU machine for encoding) |
+| 4 | Reranker fine-tuning on hard negatives mined by our dense retriever (LCE loss) | **built**, runs on Kaggle |
+| | Full 8.8M-passage corpus (BM25, exact dense on GPU, IVF-PQ) | **built**, runs on Kaggle: see [kaggle/](kaggle/README.md) |
 
 ## Results
 
@@ -227,7 +227,12 @@ pip install torch --index-url https://download.pytorch.org/whl/cu128
 `--device auto` (the default everywhere) then uses the GPU in fp16 for both the
 reranker and the bi-encoder. FAISS stays on CPU (`faiss-cpu`).
 
-### Full corpus (8.8M passages)
+### Full corpus (8.8M passages) and reranker training: Kaggle
+
+GPU-heavy work (encoding 8.8M passages, training) runs in three Kaggle notebooks;
+Elasticsearch and serving stay on the laptop. Step by step: [kaggle/README.md](kaggle/README.md).
+
+### Full corpus on a local GPU machine
 
 ```bat
 python scripts/prepare_data.py --name msmarco-full --corpus msmarco-passage --eval-sets msmarco-dev dl19 dl20
@@ -246,13 +251,16 @@ searchengine/
   retrieval/     Retriever interface; LocalBM25, ElasticsearchBM25, DenseRetriever, RRFHybrid
   dense/         BiEncoder (prefix registry), resumable sharded encoding, FAISS flat/HNSW/IVF-PQ
   ranking/       CrossEncoderReranker (fp32 / fp16 / dynamic int8), OnnxCrossEncoderReranker + export
+  training/      hard-negative mining, cross-encoder fine-tuning (grouped LCE loss, AMP, checkpoints)
   pipeline.py    retrieve -> fetch text -> rerank, timed per stage; rerank_run for offline eval
   docstore.py    byte-offset random access to passages (ES backends use _mget)
   eval/          metrics (= trec_eval), randomization test, TREC IO, latency, depth sweep
   envinfo.py     hardware/software fingerprint stored in every report
   api.py         FastAPI /search, /health
   factory.py     builds retrievers / doc sources / rerankers / pipelines from settings
-scripts/         prepare_data, build_index, evaluate, rerank, compare_runs,
+kaggle/          three notebooks for the full corpus + training on free Kaggle GPUs
+scripts/         prepare_data, prepare_train, build_index, evaluate, rerank, compare_runs,
+                 mine_negatives, train_reranker,
                  encode_corpus, build_dense_index, export_onnx, depth_sweep, plot_tradeoff,
                  benchmark, compare_benchmarks, load_test, check_analyzer, check_bm25_parity, es_latency_probe
 tests/           unit tests incl. tiny randomly initialized models (no downloads)

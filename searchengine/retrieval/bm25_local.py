@@ -206,8 +206,15 @@ class LocalBM25(Retriever):
             return []
         return self._topk_from_row(q @ self.W, k)
 
-    def batch_search(self, queries: Queries, k: int = 1000, batch_size: int = 64) -> Run:
-        """Vectorized: one sparse (B x V) @ (V x N) product per batch of queries."""
+    def batch_search(self, queries: Queries, k: int = 1000, batch_size: int | None = None) -> Run:
+        """Vectorized: one sparse (B x V) @ (V x N) product per batch of queries.
+
+        The product's size is the sum of the query terms' postings lengths. On 8.8M
+        passages one common term ("what", "how") alone has millions of postings, so a
+        64-query batch can need several GB; large corpora use small batches.
+        """
+        if batch_size is None:
+            batch_size = 64 if self.n_docs < 1_000_000 else 4
         run: Run = {}
         items = list(queries.items())
         for start in range(0, len(items), batch_size):

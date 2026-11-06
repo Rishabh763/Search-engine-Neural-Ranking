@@ -16,7 +16,7 @@ import _bootstrap  # noqa: F401
 from searchengine.config import get_settings
 from searchengine.data.collection import Collection
 from searchengine.dense.build import encode_collection
-from searchengine.dense.encoder import DEFAULT_DENSE_MODEL, BiEncoder, model_slug
+from searchengine.dense.encoder import BiEncoder, default_dense_model, model_slug
 from searchengine.dense.index import dense_dir
 from searchengine.envinfo import environment_info, short_label
 
@@ -24,12 +24,13 @@ from searchengine.envinfo import environment_info, short_label
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--collection", required=True)
-    p.add_argument("--model", default=DEFAULT_DENSE_MODEL)
+    p.add_argument("--model", default=None, help="default: DENSE_MODEL env or msmarco-MiniLM-L6-cos-v5")
     p.add_argument("--device", default="auto")
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--max-length", type=int, default=256)
     p.add_argument("--shard-size", type=int, default=100_000)
     args = p.parse_args()
+    args.model = args.model or default_dense_model()
 
     s = get_settings()
     coll = Collection.from_name(args.collection, s.data_dir)

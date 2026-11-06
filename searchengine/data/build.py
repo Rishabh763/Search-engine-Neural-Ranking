@@ -174,3 +174,39 @@ def build(
         ),
     }
     return write_collection(Path(out_dir), docs, loaded, manifest)
+
+
+TRAIN_IR_ID = "msmarco-passage/train/judged"
+
+
+def export_train_split(collection_dir: Path, n_queries: int | None = 200_000, seed: int = 13,
+                       ir_id: str = TRAIN_IR_ID) -> dict:
+    """Write MS MARCO training queries + qrels into <collection>/train/ for reranker training.
+
+    Training queries are disjoint from dev/small and TREC DL by construction (different
+    MS MARCO splits), so nothing evaluated on was trained on. Only queries with at least
+    one positive are kept; `n_queries` samples them (seeded) to bound mining/training cost.
+    """
+    import json
+
+    from searchengine.data.collection import write_queries
+    from searchengine.eval.trec import write_qrels
+
+    collection_dir = Path(collection_dir)
+    ds = _ir().load(ir_id)
+    qrels: Qrels = {}
+    for q in ds.qrels_iter():
+        if int(q.relevance) > 0:
+            qrels.setdefault(q.query_id, {})[q.doc_id] = int(q.relevance)
+    queries: Queries = {q.query_id: q.text for q in ds.queries_iter() if q.query_id in qrels}
+    if n_queries is not None and n_queries < len(queries):
+        keep = set(random.Random(f"{seed}:train").sample(sorted(queries), n_queries))
+        queries = {k: v for k, v in queries.items() if k in keep}
+    qrels = {q: qrels[q] for q in queries}
+    out = collection_dir / "train"
+    write_queries(queries, out / "queries.tsv")
+    write_qrels(qrels, out / "qrels.txt")
+    meta = {"source": ir_id, "n_queries": len(queries), "n_positives": sum(len(v) for v in qrels.values()), "seed": seed}
+    with open(out / "meta.json", "w", encoding="utf-8", newline="\n") as f:
+        json.dump(meta, f, indent=2)
+    return meta
