@@ -81,6 +81,7 @@ takes ~30 min; give Docker at least 6 GB of RAM if possible.
 - `Could not resolve host: github.com`: Internet is off for the notebook. Turn it on in the right sidebar (Session options), restart, rerun. The toggle needs a phone-verified Kaggle account.
 - `The repo on GitHub is older than this notebook`: you haven't pushed. Commit and push from the laptop, run `!rm -rf /tmp/repo`, rerun the first cell.
 - Kaggle runs whatever is on `main` at clone time, so push before every "Save & Run All".
+- **Training shows tens of pairs/s instead of hundreds:** passage text is being read from `/kaggle/input` (slow random reads). Notebook 03 copies the collection to `/tmp/data` first; make sure that cell ran and `DATA_DIR` points there.
 - **Out of GPU memory in 02/03:** the corpus alone is 6.8 GB on the GPU. Make sure
   nothing else holds GPU memory (restart the session) and keep the defaults.
 - **Session ended mid-run (12 h limit):** re-run. Encoding skips finished shards;
