@@ -80,11 +80,14 @@ class EmbeddingStore:
         return np.concatenate(parts) if parts else np.zeros((0, self.dim), np.float32)
 
 
-def exact_topk(store: EmbeddingStore, Q: np.ndarray, k: int, q_batch: int = 256) -> tuple[np.ndarray, np.ndarray]:
+def exact_topk(store: EmbeddingStore, Q: np.ndarray, k: int, q_batch: int = 64) -> tuple[np.ndarray, np.ndarray]:
     """Exact top-k by streaming over shards: memory O(shard + q_batch x shard), not O(corpus).
 
     Shards are the outer loop, so each shard is read from disk once however many
-    queries there are; queries are scored in chunks to bound the score matrix."""
+    queries there are; queries are scored in chunks to bound the score matrix.
+    Peak per chunk, 500K-row shards: fp32 shard 768 MB + scores 128 MB + argpartition's
+    int64 indices 256 MB. (q_batch=256 with a negated score copy peaked near 2.8 GB and
+    failed on a Windows laptop: Windows does not overcommit memory.)"""
     Q = np.ascontiguousarray(Q, dtype=np.float32)
     nq = len(Q)
     k_eff = min(k, store.n)
@@ -94,7 +97,7 @@ def exact_topk(store: EmbeddingStore, Q: np.ndarray, k: int, q_batch: int = 256)
         for a in range(0, nq, q_batch):
             S = Q[a : a + q_batch] @ E.T
             kk = min(k_eff, S.shape[1])
-            part = np.argpartition(-S, kk - 1, axis=1)[:, :kk]
+            part = np.argpartition(S, S.shape[1] - kk, axis=1)[:, -kk:]  # largest kk, no negated copy
             cat_s = np.concatenate([best_s[a : a + q_batch], np.take_along_axis(S, part, 1)], 1)
             cat_i = np.concatenate([best_i[a : a + q_batch], part + off], 1)
             keep = np.argpartition(-cat_s, k_eff - 1, axis=1)[:, :k_eff]
