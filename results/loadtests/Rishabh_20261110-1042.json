@@ -1,0 +1,115 @@
+{
+  "url": "http://127.0.0.1:8000",
+  "server": {
+    "status": "ok",
+    "collection": "msmarco-full",
+    "backend": "dense",
+    "retriever": "dense-ivfpq96:msmarco-MiniLM-L6-cos-v5+refine500",
+    "reranker": {
+      "name": "onnx-fp16-dml:ms-marco-MiniLM-L-6-v2",
+      "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+      "runtime": "onnxruntime",
+      "variant": "fp16",
+      "graph_fused": true,
+      "device": "dml",
+      "provider": "DmlExecutionProvider",
+      "max_length": 512,
+      "batch_size": 64,
+      "file_mb": 43.4
+    }
+  },
+  "params": {
+    "k": 10,
+    "candidates": 100
+  },
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 60,
+      "errors": 0,
+      "throughput_rps": 0.88,
+      "p50_ms": 1105.9,
+      "p95_ms": 1484.4,
+      "p99_ms": 1579.7,
+      "server_mean_ms": {
+        "retrieve_ms": 117.1,
+        "fetch_ms": 37.6,
+        "rerank_ms": 975.3,
+        "total_ms": 1130.0
+      }
+    },
+    {
+      "concurrency": 2,
+      "requests": 60,
+      "errors": 0,
+      "throughput_rps": 1.01,
+      "p50_ms": 2018.7,
+      "p95_ms": 2310.5,
+      "p99_ms": 2423.3,
+      "server_mean_ms": {
+        "retrieve_ms": 122.5,
+        "fetch_ms": 35.1,
+        "rerank_ms": 1811.1,
+        "total_ms": 1968.7
+      }
+    },
+    {
+      "concurrency": 4,
+      "requests": 60,
+      "errors": 0,
+      "throughput_rps": 1.01,
+      "p50_ms": 3971.0,
+      "p95_ms": 4261.6,
+      "p99_ms": 4455.3,
+      "server_mean_ms": {
+        "retrieve_ms": 130.5,
+        "fetch_ms": 37.7,
+        "rerank_ms": 3738.6,
+        "total_ms": 3906.7
+      }
+    },
+    {
+      "concurrency": 8,
+      "requests": 60,
+      "errors": 0,
+      "throughput_rps": 0.96,
+      "p50_ms": 8324.4,
+      "p95_ms": 9096.2,
+      "p99_ms": 9127.6,
+      "server_mean_ms": {
+        "retrieve_ms": 149.1,
+        "fetch_ms": 38.5,
+        "rerank_ms": 7833.1,
+        "total_ms": 8020.8
+      }
+    }
+  ],
+  "environment": {
+    "timestamp_utc": "2026-11-10T05:08:23+00:00",
+    "hostname": "Rishabh",
+    "os": "Windows-11-10.0.26300-SP0",
+    "python": "3.12.0",
+    "cpu": "AMD Ryzen 5 5500U with Radeon Graphics",
+    "logical_cores": 12,
+    "physical_cores": 6,
+    "ram_gb": 9.9,
+    "on_battery": false,
+    "torch": "2.15.0+cpu",
+    "torch_threads": 6,
+    "cuda_available": false,
+    "mps_available": false,
+    "gpu_adapters": [
+      "AMD Radeon(TM) Graphics"
+    ],
+    "onnx_providers": [
+      "DmlExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "numpy": "2.5.4",
+    "transformers": "5.22.1",
+    "sentence_transformers": "6.2.0",
+    "onnxruntime": "1.24.4",
+    "faiss": "1.15.1",
+    "elasticsearch": "8.19.3"
+  }
+}
