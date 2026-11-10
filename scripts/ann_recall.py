@@ -51,7 +51,7 @@ def main() -> None:
     p.add_argument("--collection", required=True)
     p.add_argument("--model", default=None, help="default: DENSE_MODEL env or msmarco-MiniLM-L6-cos-v5")
     p.add_argument("--index", required=True, help="index file name, e.g. ivfpq96 (for ivfpq96.faiss)")
-    p.add_argument("--eval-set", default=None, help="queries from this eval set (default: the first one)")
+    p.add_argument("--eval-set", default=None, help="queries from this eval set (default: the one with most queries)")
     p.add_argument("--queries", type=int, default=1000)
     p.add_argument("--nprobe", type=int, nargs="+", default=[64])
     p.add_argument("--ef-search", type=int, default=128)
@@ -71,7 +71,7 @@ def main() -> None:
     env = environment_info()
     print(f"machine: {short_label(env)}\n{store.n} vectors x {store.dim}, index {args.index} ({type(index).__name__})")
 
-    es_name = args.eval_set or coll.eval_set_names[0]
+    es_name = args.eval_set or max(coll.eval_set_names, key=lambda e: len(coll.queries(e)))
     all_texts = list(coll.queries(es_name).values())
     n_cfg = len(args.nprobe) * len(args.refine)
     warm_n = 20
@@ -98,13 +98,13 @@ def main() -> None:
             lat_q = Q_lat[cfg_i * n_lat : (cfg_i + 1) * n_lat]
             cfg_i += 1
             set_search_params(index, nprobe, args.ef_search, max(100, refine))
+            for q in Q_warm:  # warm-up first: FAISS thread pool, index pages (never lat_q's rows)
+                search(index, vectors, q[None], 10, refine)
             t0 = time.perf_counter()
             I = search(index, vectors, Q, 100, refine)
             batch_ms = (time.perf_counter() - t0) * 1000 / len(Q)
             r10 = recall_vs_exact(store, Q, exact_s, I, 10, vectors=vectors)
             r100 = recall_vs_exact(store, Q, exact_s, I, 100, vectors=vectors) if refine == 0 or refine >= 100 else None
-            for q in Q_warm:  # warm-up: FAISS thread pool, index pages (not lat_q's rows)
-                search(index, vectors, q[None], 10, refine)
             times = []
             for q in lat_q:
                 t = time.perf_counter()
