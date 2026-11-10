@@ -56,7 +56,8 @@ Download each notebook's output with the Kaggle CLI (`pip install kaggle six`, a
 
 The 6.8 GB of embedding shards (`emb_*.npy`) are needed: serving keeps only the
 IVF-PQ index in RAM, but refines its top candidates with exact scores read from the
-shards (memory-mapped), which takes recall@10 vs exact from ~0.76 back towards 1.
+shards (memory-mapped). Measured: nprobe 1024 + refine 500 gives recall@10 vs exact
+0.988 (0.77 without refinement at nprobe 64); see the main README.
 
 Then on the laptop (Elasticsearch for BM25 over 8.8M, and the full collection for passage text):
 
@@ -65,16 +66,16 @@ python scripts/prepare_data.py --name msmarco-full --corpus msmarco-passage --ev
 python scripts/build_index.py --collection msmarco-full --backend es
 python scripts/evaluate.py --collection msmarco-full --retriever bm25-es --eval-sets dl19 dl20
 
-python scripts/ann_recall.py --collection msmarco-full --index ivfpq96 --nprobe 64 --refine 0 100 200 500 1000
-python scripts/evaluate.py --collection msmarco-full --retriever dense --dense-index ivfpq96 --nprobe 64 --refine 1000 --eval-sets dl19 dl20
+python scripts/ann_recall.py --collection msmarco-full --index ivfpq96 --nprobe 256 512 1024 --refine 200 500
+python scripts/evaluate.py --collection msmarco-full --retriever dense --dense-index ivfpq96 --nprobe 1024 --refine 500 --k 100 --eval-sets dl19 dl20
 
 :: The fine-tuned reranker is statistically equivalent to the public one (see the main
 :: README), so serve the public model's ONNX export (scripts/export_onnx.py).
 set SEARCH_COLLECTION=msmarco-full
 set SEARCH_BACKEND=dense
 set DENSE_INDEX=ivfpq96
-set DENSE_NPROBE=64
-set DENSE_REFINE=1000
+set DENSE_NPROBE=1024
+set DENSE_REFINE=500
 set RERANK_MODEL=models\ms-marco-MiniLM-L-6-v2-onnx
 set RERANK_ONNX_VARIANT=fp16
 set RERANK_DEVICE=dml

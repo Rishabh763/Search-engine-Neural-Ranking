@@ -69,18 +69,34 @@ Deep Learning 2019/2020 (43 / 54 queries, graded judgments). Logs and reports:
   | 256 | 100 | 0.956 | 0.806 | 31.6 ms |
   | 256 | 200 | 0.956 | 0.909 | 41.4 ms |
   | 256 | 500 | 0.956 | 0.921 | 71.0 ms |
+  | 512 | 200 | 0.977 | 0.936 | 89.9 ms |
+  | 1024 | 200 | 0.988 | 0.954 | 133.6 ms |
+  | **1024** | **500** | **0.988** | **0.974** | **184.8 ms** |
 
   Two separate errors: product quantization *misorders* neighbours (exact rescoring of
   the top 100 from the memory-mapped vectors fixes all of it, +0.13 to +0.15 at every
   nprobe), and the coarse quantizer *misses* cells (only nprobe helps: misses
-  10.6% -> 7.0% -> 4.4% per doubling). Costs: ~0.085 ms per probed cell, ~90 us per
-  refined row (a cold page fault; ~10 us when cached).
-- **The ANN loss is real end to end, and reranking amplifies it.** At nprobe 256,
-  k' 200: dev MRR@10 0.317 vs 0.324 exact (-0.007, 95% CI [-0.009, -0.005]); after
-  reranking the top 100 (same ONNX model on both), DL19+DL20 nDCG@10 0.704 vs 0.736
-  (-0.031, p < 1e-4), larger than the first-stage gap of -0.023. A relevant passage
-  the ANN misses at rank 40 barely moves first-stage nDCG@10, but the cross-encoder
-  would have promoted it into the top 10: in a cascade, candidate recall is the ceiling.
+  10.6% -> 7.0% -> 4.4% -> 2.3% -> 1.2% from nprobe 64 to 1024). Costs: ~90 us per
+  refined row (a cold page fault; ~10 us when cached); scanning grows faster than
+  linearly in nprobe once the probed lists stop fitting in CPU cache.
+- **The ANN loss is real end to end, reranking amplifies it, and nprobe buys it back.**
+  Reranking the top 100 with the same ONNX model, DL19+DL20 nDCG@10 (n = 97):
+
+  | Candidates | first stage | after reranking | diff vs exact, reranked (95% CI) |
+  |---|---:|---:|---|
+  | Exact dense search | 0.652 | 0.736 | |
+  | IVF-PQ, nprobe 256, k' 200 | 0.629 | 0.704 | -0.031 [-0.051, -0.015] |
+  | IVF-PQ, nprobe 1024, k' 200 | 0.651 | 0.728 | -0.008 [-0.014, -0.003] |
+  | **IVF-PQ, nprobe 1024, k' 500** | **0.651** | **0.731** | **-0.005 [-0.010, -0.001]** |
+
+  At nprobe 256 the reranked gap (-0.031) is larger than the first-stage gap (-0.023):
+  a relevant passage the ANN misses at rank 40 barely moves first-stage nDCG@10, but the
+  cross-encoder would have promoted it into the top 10. nprobe 1024 with k' 500 recovers
+  84% of that loss for ~185 ms, next to ~880 ms of reranking on the iGPU. The remaining
+  gap is still "significant" (p = 0.013), and always will be at some sample size: with
+  exact rescoring, ANN candidates can almost only lose to exact search, never win, so
+  the per-query differences are one-signed. The honest claim is the effect size and its
+  interval, not a p-value. Serving default: `DENSE_NPROBE=1024`, `DENSE_REFINE=500`.
 
 ### 100K-passage subset (laptop)
 
@@ -354,8 +370,12 @@ docs/            charts used in this README
   it reorders, it does not find new documents.
 - **In a cascade, first-stage recall matters more, not less.** Approximate search that
   costs 0.023 nDCG@10 on its own costs 0.031 after a strong reranker, because the
-  reranker can only promote what it is given. With reranking at ~900 ms per query on
-  the iGPU, the dense stage (~40 ms) is the cheap place to buy quality back.
+  reranker can only promote what it is given. With reranking at ~880 ms per query on
+  the iGPU, the dense stage is the cheap place to buy quality back: +145 ms of probing
+  and refinement cut the reranked loss from 0.031 to 0.005 nDCG@10.
+- **A one-signed difference makes every paired test "significant" eventually.** When
+  system B can only lose to system A (ANN vs exact with exact rescoring), report the
+  effect size and confidence interval; "not significant" is the wrong target.
 - **Same model, two runtimes, same answer.** The reranker as ONNX fp16 on an AMD iGPU
   (DirectML) and as PyTorch fp16 on an NVIDIA T4 agree within 0.0012 nDCG@10 on
   DL19/DL20.

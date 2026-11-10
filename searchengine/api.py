@@ -10,9 +10,10 @@ Configuration (environment variables):
     SEARCH_BACKEND      es | local | dense | hybrid-es | hybrid-local   (default es)
     DENSE_MODEL         bi-encoder for dense/hybrid    (default msmarco-MiniLM-L6-cos-v5)
     DENSE_INDEX         flat | hnsw | ivfpq | a named index such as ivfpq96 (default flat)
-    DENSE_NPROBE        IVF cells searched per query   (default 32)
+    DENSE_NPROBE        IVF cells searched per query   (default 32; measured choice on
+                        the full corpus with nlist 8192: 1024)
     DENSE_REFINE        rescore this many ANN candidates exactly from the stored
-                        vectors (default 0 = off; 1000 recommended with IVF-PQ)
+                        vectors (default 0 = off; measured choice with IVF-PQ: 500)
     RERANK_MODEL        HF model id/path, ONNX export dir, or "none"
                                                        (default cross-encoder/ms-marco-MiniLM-L-6-v2)
     RERANK_QUANTIZE     int8 = PyTorch dynamic int8 on CPU (default off)
