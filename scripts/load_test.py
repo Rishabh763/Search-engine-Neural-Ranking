@@ -83,6 +83,8 @@ async def main_async(args) -> None:
     pool = [q for e in sets for q in coll.queries(e).values()]
     rng = random.Random(0)
     params = {"k": args.k}
+    if args.dedup:
+        params["dedup"] = args.dedup == "on"
     if args.candidates:
         params["candidates"] = args.candidates
 
@@ -132,6 +134,7 @@ def main() -> None:
     p.add_argument("--warmup", type=int, default=5)
     p.add_argument("--k", type=int, default=10)
     p.add_argument("--candidates", type=int, default=None, help="default: the server's SEARCH_CANDIDATES")
+    p.add_argument("--dedup", choices=["on", "off"], default=None, help="default: the server's SEARCH_DEDUP")
     args = p.parse_args()
     asyncio.run(main_async(args))
 

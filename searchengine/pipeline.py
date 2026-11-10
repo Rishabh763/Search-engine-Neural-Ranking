@@ -1,7 +1,8 @@
 """Retrieve-then-rerank: the two-stage search pipeline.
 
-    query --> first-stage retriever (BM25 today; hybrid later) --> top `candidates`
+    query --> first-stage retriever (BM25, dense, or hybrid) --> top `candidates`
           --> fetch passage text --> reranker scores each (query, passage) pair
+          --> [optional] collapse near-duplicates (searchengine.dedup)
           --> top k by reranker score
 
 Every stage is timed separately, because "the search takes 120 ms" is useless
@@ -17,10 +18,11 @@ recall@1000 is unchanged and metrics isolate the effect of reranking.
 from __future__ import annotations
 
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 
+from searchengine.dedup import DEFAULT_THRESHOLD, collapse
 from searchengine.docstore import DocumentSource
 from searchengine.eval.metrics import rank_documents
 from searchengine.ranking.base import Reranker
@@ -42,6 +44,7 @@ class SearchResult:
     rerank_score: float | None
     title: str
     text: str
+    duplicates: list[str] = field(default_factory=list)  # ids of near-duplicates collapsed into this result
 
 
 @dataclass
@@ -50,6 +53,7 @@ class Timings:
     fetch_ms: float
     rerank_ms: float
     total_ms: float
+    dedup_ms: float = 0.0
 
 
 class SearchPipeline:
@@ -58,10 +62,14 @@ class SearchPipeline:
         self.docs = docs
         self.reranker = reranker
 
-    def search(self, query: str, k: int = 10, candidates: int = 100, rerank: bool = True) -> tuple[list[SearchResult], Timings]:
+    def search(self, query: str, k: int = 10, candidates: int = 100, rerank: bool = True,
+               dedup: bool = False, dedup_threshold: float = DEFAULT_THRESHOLD) -> tuple[list[SearchResult], Timings]:
+        """`dedup`: collapse near-duplicate passages after ranking, so the top k are k
+        distinct passages (fewer only if the candidates run out). Without reranking,
+        `candidates` passages are still retrieved so there is something to refill from."""
         rerank = rerank and self.reranker is not None
         t0 = time.perf_counter()
-        hits = self.retriever.search(query, k=candidates if rerank else k)
+        hits = self.retriever.search(query, k=candidates if (rerank or dedup) else k)
         t1 = time.perf_counter()
         ids = [h.doc_id for h in hits]
         docs = self.docs.get_documents(ids)
@@ -76,15 +84,23 @@ class SearchPipeline:
             order = sorted(order, key=lambda i: -float(ce[i]))
         t3 = time.perf_counter()
 
+        dups: dict[int, list[int]] = {}
+        if dedup and order:
+            c = collapse([passage_text(docs[hits[i].doc_id]) for i in order], k=k, threshold=dedup_threshold)
+            dups = {order[a]: [order[b] for b in bs] for a, bs in c.duplicates.items()}
+            order = [order[a] for a in c.kept]
+        t4 = time.perf_counter()
+
         results = []
         for rank, i in enumerate(order[:k], start=1):
             h, d = hits[i], docs[hits[i].doc_id]
             rs = float(ce[i]) if ce is not None else None
             results.append(
-                SearchResult(rank, h.doc_id, rs if rs is not None else h.score, h.score, i + 1, rs, d.title, d.text)
+                SearchResult(rank, h.doc_id, rs if rs is not None else h.score, h.score, i + 1, rs, d.title, d.text,
+                             [hits[j].doc_id for j in dups.get(i, [])])
             )
         ms = lambda a, b: round((b - a) * 1000, 2)  # noqa: E731
-        return results, Timings(ms(t0, t1), ms(t1, t2), ms(t2, t3), ms(t0, t3))
+        return results, Timings(ms(t0, t1), ms(t1, t2), ms(t2, t3), ms(t0, t4), ms(t3, t4))
 
 
 def rerank_run(

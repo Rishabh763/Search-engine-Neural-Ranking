@@ -36,10 +36,11 @@ def test_search_reranked(client):
     assert body["reranked"] is True and body["candidates"] == 40 and len(body["results"]) == 5
     first = body["results"][0]
     assert set(first) == {"rank", "id", "title", "snippet", "score", "first_stage_score", "first_stage_rank",
-                          "rerank_score", "relevance"}
+                          "rerank_score", "duplicates", "relevance"}
     assert first["rank"] == 1 and 1 <= first["first_stage_rank"] <= 40
     assert body["retriever"] == "bm25-local" and body["filtered_out"] == 0
-    assert set(body["timings"]) == {"retrieve_ms", "fetch_ms", "rerank_ms", "total_ms"}
+    assert set(body["timings"]) == {"retrieve_ms", "fetch_ms", "rerank_ms", "total_ms", "dedup_ms"}
+    assert body["dedup"] is True and body["collapsed"] == sum(len(x["duplicates"]) for x in body["results"])
 
 
 def test_search_without_rerank(client):

@@ -19,8 +19,9 @@ Configuration (environment variables):
     RERANK_QUANTIZE     int8 = PyTorch dynamic int8 on CPU (default off)
     RERANK_ONNX_VARIANT int8 | fp32, when RERANK_MODEL is an ONNX export dir (default int8)
     RERANK_DEVICE       auto | cpu | cuda | mps | dml  (default auto; dml = DirectML, ONNX only)
-    SEARCH_CANDIDATES   default `candidates` per request (default 100; 20 is the measured
-                        sweet spot with dense retrieval, see README "Operating points")
+    SEARCH_CANDIDATES   default `candidates` per request (default 100; on the full corpus
+                        20 gives 3x the throughput for -0.023 nDCG@10, see README)
+    SEARCH_DEDUP        collapse near-duplicate passages by default (default 1; 0 = off)
 
 Endpoints are plain `def` (not `async def`): retrieval and model inference are
 blocking, CPU/GPU-bound calls, and FastAPI runs `def` endpoints in a worker
@@ -54,6 +55,7 @@ class ResultOut(BaseModel):
     first_stage_score: float  # BM25 score, dense cosine, or RRF score, depending on the backend
     first_stage_rank: int
     rerank_score: float | None
+    duplicates: list[str]  # near-duplicate passages collapsed into this result (when dedup is on)
     # sigmoid(rerank logit). The MS MARCO cross-encoders are trained with binary
     # cross-entropy, so this approximates P(relevant); other rerankers may not be calibrated.
     relevance: float | None
@@ -64,6 +66,7 @@ class TimingsOut(BaseModel):
     fetch_ms: float
     rerank_ms: float
     total_ms: float
+    dedup_ms: float
 
 
 class SearchResponse(BaseModel):
@@ -73,6 +76,8 @@ class SearchResponse(BaseModel):
     candidates: int
     reranked: bool
     filtered_out: int  # results dropped by min_relevance
+    dedup: bool
+    collapsed: int  # near-duplicates removed while filling the top k
     results: list[ResultOut]
     timings: TimingsOut
 
@@ -81,6 +86,7 @@ def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None)
     """Pass a pipeline for tests; otherwise one is built from env vars at startup."""
     state: dict = {"pipeline": pipeline, "meta": meta or {}}
     default_candidates = int(os.environ.get("SEARCH_CANDIDATES", "100"))
+    default_dedup = os.environ.get("SEARCH_DEDUP", "1").strip().lower() not in ("0", "false", "no", "off")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -123,13 +129,14 @@ def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None)
         candidates: int = Query(default_candidates, ge=1, le=1000, description="first-stage candidates to rerank"),
         rerank: bool = Query(True, description="apply the cross-encoder"),
         min_relevance: float = Query(0.0, ge=0.0, le=1.0, description="drop reranked results below this relevance"),
+        dedup: bool = Query(default_dedup, description="collapse near-duplicate passages (searchengine.dedup)"),
     ) -> SearchResponse:
         if not q.strip():
             raise HTTPException(status_code=422, detail="query is blank")
         if candidates < k:
             raise HTTPException(status_code=422, detail="candidates must be >= k")
         p: SearchPipeline = state["pipeline"]
-        results, t = p.search(q, k=k, candidates=candidates, rerank=rerank)
+        results, t = p.search(q, k=k, candidates=candidates, rerank=rerank, dedup=dedup)
         reranked = rerank and p.reranker is not None
         out = []
         for r in results:
@@ -146,6 +153,7 @@ def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None)
                     first_stage_score=r.first_stage_score,
                     first_stage_rank=r.first_stage_rank,
                     rerank_score=r.rerank_score,
+                    duplicates=r.duplicates,
                     relevance=None if rel is None else round(rel, 4),
                 )
             )
@@ -156,6 +164,8 @@ def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None)
             candidates=candidates if reranked else k,
             reranked=reranked,
             filtered_out=len(results) - len(out),
+            dedup=dedup,
+            collapsed=sum(len(r.duplicates) for r in results),
             results=out,
             timings=TimingsOut(**t.__dict__),
         )

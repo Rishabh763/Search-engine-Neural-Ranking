@@ -25,6 +25,7 @@ Query
 | 5 | Latency: depth sweeps, ONNX fp32/fp16/int8, PyTorch int8, DirectML GPU, cross-machine benchmarks | **done** on one laptop |
 | 4 | Reranker fine-tuning on hard negatives mined by our dense retriever (LCE loss) | **done** on Kaggle (result: no gain, see below) |
 | | Full 8.8M-passage corpus (BM25, exact dense on GPU, IVF-PQ + exact refinement) | **done** on Kaggle; serving on the laptop: see [kaggle/](kaggle/README.md) |
+| | Near-duplicate collapsing at serving time (shingle containment, after reranking) | **done**, on by default |
 
 ## Results
 
@@ -86,8 +87,8 @@ Deep Learning 2019/2020 (43 / 54 queries, graded judgments). Logs and reports:
   |---|---:|---:|---|
   | Exact dense search | 0.652 | 0.736 | |
   | IVF-PQ, nprobe 256, k' 200 | 0.629 | 0.704 | -0.031 [-0.051, -0.015] |
-  | IVF-PQ, nprobe 1024, k' 200 | 0.651 | 0.728 | -0.008 [-0.014, -0.003] |
-  | **IVF-PQ, nprobe 1024, k' 500** | **0.651** | **0.731** | **-0.005 [-0.010, -0.001]** |
+  | IVF-PQ, nprobe 1024, k' 200 | 0.650 | 0.728 | -0.008 [-0.014, -0.003] |
+  | **IVF-PQ, nprobe 1024, k' 500** | **0.650** | **0.731** | **-0.005 [-0.010, -0.001]** |
 
   At nprobe 256 the reranked gap (-0.031) is larger than the first-stage gap (-0.023):
   a relevant passage the ANN misses at rank 40 barely moves first-stage nDCG@10, but the
@@ -97,6 +98,60 @@ Deep Learning 2019/2020 (43 / 54 queries, graded judgments). Logs and reports:
   exact rescoring, ANN candidates can almost only lose to exact search, never win, so
   the per-query differences are one-signed. The honest claim is the effect size and its
   interval, not a p-value. Serving default: `DENSE_NPROBE=1024`, `DENSE_REFINE=500`.
+
+**Serving all 8.8M passages from the laptop** (IVF-PQ nprobe 1024 + refine 500, reranker
+ONNX fp16 on the iGPU; quality = pooled DL19+DL20 nDCG@10, n = 97; latency from
+`scripts/depth_sweep.py` and `scripts/load_test.py`, reports in `results/loadtests/`)
+
+| Rerank depth | nDCG@10 | rerank p50 | end-to-end p50 (1 client) | max throughput |
+|---:|---:|---:|---:|---:|
+| 0 (dense only) | 0.650 | | | |
+| 10 | 0.671 | 141 ms | | |
+| 20 | 0.708 | 186 ms | 498 ms | 3.2 req/s |
+| 30 | 0.711 | 370 ms | | |
+| 50 | 0.725 | 657 ms | | |
+| 70 | 0.726 | 787 ms | | |
+| 100 | 0.731 | 967 ms | 1,106 ms | 1.0 req/s |
+
+- **One iGPU is one server in a queue.** The DirectML reranker runs under a lock, so
+  throughput saturates at 1 / (rerank service time) and latency then grows linearly
+  with concurrency (Little's law, W = L / X: at 100 candidates, 8 clients / 0.96 req/s
+  = 8.3 s, measured p50 8.3 s). Retrieval and fetching run in parallel on the CPU
+  and stay flat. Under load the serialized stage costs ~315 ms at depth 20, not the
+  186 ms it takes alone: the other requests' encoding and IVF scans compete for the
+  same 6 cores.
+- **The 100K subset's sweet spot did not transfer.** On the subset, 20 candidates came
+  close to peak quality; on 8.8M passages depth 20 costs 0.023 nDCG@10 against depth 100
+  (95% CI [-0.040, -0.006]). The subset keeps every judged passage but drops ~99% of
+  the distractors, so relevant passages sit higher in the dense ranking there. Depth
+  50 recovers ~73% of that gap at ~68% of the rerank cost; the choice is a latency
+  budget, not a free lunch.
+- **The dense stage is ~120 ms warm and ~220 ms cold** (vector rows in or out of the
+  OS page cache: the same load test run twice), so at depth 20 retrieval is ~45% of
+  end-to-end latency.
+
+**Near-duplicate collapsing.** MS MARCO, like the web it came from, holds many copies of
+the same passage (other URLs, re-cased, stripped of punctuation, cut short), and both
+models score copies alike. On the serving configuration's top 10, 79% of DL19 and 80% of
+DL20 queries show at least one copy, and 21% / 17% of all top-10 slots are copies. The API
+now collapses them after reranking and refills from the candidates (`searchengine/dedup.py`:
+word 3-shingle *containment* >= 0.8, which also catches truncated copies that Jaccard
+misses; 0.4 ms p50 per query). Measured with `scripts/dedup_stats.py`:
+
+| Top 10 | DL19 | DL20 |
+|---|---:|---:|
+| distinct relevant passages, before -> after | 4.88 -> 6.23 | 4.52 -> 5.11 |
+| nDCG@10 (scores ids, not content), before -> after | 0.733 -> 0.715 | 0.729 -> 0.684 |
+
+The two rows disagree, and the first is the one a user sees. 96% of the judged-relevant
+copies that collapsing removed (128 of 133) were represented by a passage that is itself
+judged relevant, so nDCG was paying the uncollapsed ranking twice for showing the same
+text: it scores document ids and does not penalise redundancy (alpha-nDCG was designed for
+that). The pooled nDCG drop (-0.033, 95% CI [-0.047, -0.020]) is therefore a property of
+the metric, reported rather than hidden. Sampled pairs at the 0.8 boundary are overlapping
+windows of one source text (a Wikipedia article shifted by a sentence), so the threshold
+trades a little extra context for not repeating the rest; at 0.9 and 0.95 the gain is still
++1.0 to +1.2 (DL19) and +0.5 to +0.6 (DL20) distinct relevant passages.
 
 ### 100K-passage subset (laptop)
 
@@ -327,7 +382,8 @@ searchengine/
                  memory-mapped vector access and exact refinement of ANN candidates
   ranking/       CrossEncoderReranker (fp32 / fp16 / dynamic int8), OnnxCrossEncoderReranker + export
   training/      hard-negative mining, cross-encoder fine-tuning (grouped LCE loss, AMP, checkpoints)
-  pipeline.py    retrieve -> fetch text -> rerank, timed per stage; rerank_run for offline eval
+  pipeline.py    retrieve -> fetch text -> rerank -> collapse duplicates, timed per stage; rerank_run
+  dedup.py       near-duplicate collapsing (word 3-shingle containment)
   docstore.py    byte-offset random access to passages (ES backends use _mget)
   eval/          metrics (= trec_eval), randomization test, TREC IO, latency, depth sweep
   envinfo.py     hardware/software fingerprint stored in every report
@@ -336,7 +392,7 @@ searchengine/
 kaggle/          three notebooks for the full corpus + training on free Kaggle GPUs
 scripts/         prepare_data, prepare_train, build_index, evaluate, rerank, compare_runs,
                  mine_negatives, train_reranker,
-                 encode_corpus, build_dense_index, ann_recall, export_onnx, depth_sweep, plot_tradeoff,
+                 encode_corpus, build_dense_index, ann_recall, dedup_stats, export_onnx, depth_sweep, plot_tradeoff,
                  benchmark, compare_benchmarks, load_test, check_analyzer, check_bm25_parity, es_latency_probe
 tests/           unit tests incl. tiny randomly initialized models (no downloads)
 results/         committed benchmark and load-test results from each machine
@@ -373,6 +429,10 @@ docs/            charts used in this README
   reranker can only promote what it is given. With reranking at ~880 ms per query on
   the iGPU, the dense stage is the cheap place to buy quality back: +145 ms of probing
   and refinement cut the reranked loss from 0.031 to 0.005 nDCG@10.
+- **Metrics score ids, not what a user reads.** Collapsing near-duplicates lowers nDCG@10
+  by 0.033 while adding 0.6 to 1.35 distinct relevant passages to every top 10: the
+  uncollapsed ranking was being credited twice for the same text. When a change improves
+  the product but hurts the metric, measure the thing the metric was standing in for.
 - **A one-signed difference makes every paired test "significant" eventually.** When
   system B can only lose to system A (ANN vs exact with exact rescoring), report the
   effect size and confidence interval; "not significant" is the wrong target.
