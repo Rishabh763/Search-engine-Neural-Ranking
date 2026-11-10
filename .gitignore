@@ -13,6 +13,7 @@ data/processed/
 indexes/
 runs/
 models/
+kaggle_out/
 
 # Env
 .env
