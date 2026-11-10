@@ -5,6 +5,7 @@ python scripts/evaluate.py --collection msmarco-100k --retriever bm25-local --ev
 python scripts/evaluate.py --collection msmarco-100k --retriever dense --dense-index flat
 python scripts/evaluate.py --collection msmarco-100k --retriever hybrid-es
 python scripts/evaluate.py --collection msmarco-full --retriever dense-exact --latency-queries 0   # GPU, Kaggle
+python scripts/evaluate.py --collection msmarco-full --retriever dense --dense-index ivfpq96 --nprobe 64 --refine 1000
 
 Outputs, per eval set, under RUNS_DIR/<collection>/<eval_set>/:
     <tag>.run    TREC run file (top --k per query)
@@ -48,6 +49,7 @@ def load_retriever(args, coll, s):
     r = build_retriever(
         backend, coll, s, index_name=args.index_name, dense_model=args.dense_model, dense_index=args.dense_index,
         device=args.device, nprobe=args.nprobe, ef_search=args.ef_search, rrf_k=args.rrf_k, fusion_depth=args.k,
+        refine=args.refine,
     )
     params = {"dense_model": args.dense_model,
               "dense_index": "exact search (torch, no index)" if backend == "dense-exact" else args.dense_index}
@@ -55,6 +57,8 @@ def load_retriever(args, coll, s):
         params["nprobe"] = args.nprobe
     if args.dense_index.startswith("hnsw") and backend != "dense-exact":
         params["ef_search"] = args.ef_search
+    if args.refine and backend != "dense-exact":
+        params["refine"] = args.refine
     if backend.startswith("hybrid"):
         params["rrf_k"] = args.rrf_k
     return r, params
@@ -73,6 +77,7 @@ def main() -> None:
     p.add_argument("--dense-index", default="flat", help="index file name: flat | hnsw | ivfpq | a --name from build_dense_index")
     p.add_argument("--nprobe", type=int, default=32)
     p.add_argument("--ef-search", type=int, default=128)
+    p.add_argument("--refine", type=int, default=0, help="dense ANN: rescore this many candidates exactly (0 = off)")
     p.add_argument("--rrf-k", type=int, default=60)
     p.add_argument("--device", default="auto")
     p.add_argument("--latency-queries", type=int, default=200, help="queries timed one-by-one (0 = skip)")

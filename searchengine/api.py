@@ -9,7 +9,10 @@ Configuration (environment variables):
     SEARCH_COLLECTION   collection name                (default msmarco-100k)
     SEARCH_BACKEND      es | local | dense | hybrid-es | hybrid-local   (default es)
     DENSE_MODEL         bi-encoder for dense/hybrid    (default msmarco-MiniLM-L6-cos-v5)
-    DENSE_INDEX         flat | hnsw | ivfpq            (default flat)
+    DENSE_INDEX         flat | hnsw | ivfpq | a named index such as ivfpq96 (default flat)
+    DENSE_NPROBE        IVF cells searched per query   (default 32)
+    DENSE_REFINE        rescore this many ANN candidates exactly from the stored
+                        vectors (default 0 = off; 1000 recommended with IVF-PQ)
     RERANK_MODEL        HF model id/path, ONNX export dir, or "none"
                                                        (default cross-encoder/ms-marco-MiniLM-L-6-v2)
     RERANK_QUANTIZE     int8 = PyTorch dynamic int8 on CPU (default off)
@@ -92,6 +95,8 @@ def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None)
                 quantize=os.environ.get("RERANK_QUANTIZE") or None,
                 onnx_variant=os.environ.get("RERANK_ONNX_VARIANT", "int8"),
                 dense_index=os.environ.get("DENSE_INDEX", "flat"),
+                nprobe=int(os.environ.get("DENSE_NPROBE", "32")),
+                refine=int(os.environ.get("DENSE_REFINE", "0")),
             )
             state["meta"] = {"collection": collection, "backend": backend}
             # Warm up so the first real request doesn't pay model/JIT/cache start-up.

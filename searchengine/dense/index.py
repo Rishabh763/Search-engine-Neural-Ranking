@@ -20,6 +20,13 @@ Index types, all on inner product (= cosine, vectors are normalized):
          vector is stored as m bytes: split into m sub-vectors, each replaced by
          the id of the nearest of 256 learned centroids (PQ). 384-d fp32 (1536 B)
          -> 48 B, a 32x reduction, at a measured cost in recall.
+
+Refinement (re-ranking ANN candidates with exact scores): PQ distances are
+approximate, so the true top 10 is often *in* the IVF-PQ top 1000 but in the wrong
+order. `refine_topk` rescores the top k' candidates with their stored vectors
+(memory-mapped fp16 shards via `VectorRows`, so RAM holds only the compressed index
+and whatever pages the OS caches) and keeps the exact top k. Cost: k' dot products
+plus k' row reads per query, instead of N.
 """
 
 from __future__ import annotations
@@ -73,44 +80,101 @@ class EmbeddingStore:
         return np.concatenate(parts) if parts else np.zeros((0, self.dim), np.float32)
 
 
-def exact_topk(store: EmbeddingStore, Q: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
-    """Exact top-k by streaming over shards: memory O(shard), not O(corpus)."""
+def exact_topk(store: EmbeddingStore, Q: np.ndarray, k: int, q_batch: int = 256) -> tuple[np.ndarray, np.ndarray]:
+    """Exact top-k by streaming over shards: memory O(shard + q_batch x shard), not O(corpus).
+
+    Shards are the outer loop, so each shard is read from disk once however many
+    queries there are; queries are scored in chunks to bound the score matrix."""
+    Q = np.ascontiguousarray(Q, dtype=np.float32)
     nq = len(Q)
-    best_s = np.full((nq, 0), -np.inf, dtype=np.float32)
-    best_i = np.zeros((nq, 0), dtype=np.int64)
+    k_eff = min(k, store.n)
+    best_s = np.full((nq, k_eff), -np.inf, dtype=np.float32)
+    best_i = np.full((nq, k_eff), -1, dtype=np.int64)
     for off, E in store.shards():
-        S = Q @ E.T
-        kk = min(k, S.shape[1])
-        part = np.argpartition(-S, kk - 1, axis=1)[:, :kk]
-        best_s = np.concatenate([best_s, np.take_along_axis(S, part, 1)], 1)
-        best_i = np.concatenate([best_i, part + off], 1)
-        if best_s.shape[1] > k:
-            keep = np.argpartition(-best_s, k - 1, axis=1)[:, :k]
-            best_s, best_i = np.take_along_axis(best_s, keep, 1), np.take_along_axis(best_i, keep, 1)
-    order = np.argsort(-best_s, axis=1)
+        for a in range(0, nq, q_batch):
+            S = Q[a : a + q_batch] @ E.T
+            kk = min(k_eff, S.shape[1])
+            part = np.argpartition(-S, kk - 1, axis=1)[:, :kk]
+            cat_s = np.concatenate([best_s[a : a + q_batch], np.take_along_axis(S, part, 1)], 1)
+            cat_i = np.concatenate([best_i[a : a + q_batch], part + off], 1)
+            keep = np.argpartition(-cat_s, k_eff - 1, axis=1)[:, :k_eff]
+            best_s[a : a + q_batch] = np.take_along_axis(cat_s, keep, 1)
+            best_i[a : a + q_batch] = np.take_along_axis(cat_i, keep, 1)
+    order = np.argsort(-best_s, axis=1, kind="stable")
     return np.take_along_axis(best_s, order, 1), np.take_along_axis(best_i, order, 1)
 
 
+class VectorRows:
+    """Random access to stored vectors by row id, without loading the corpus.
+
+    Each fp16 shard is opened as a read-only memory map; `get` sorts the requested
+    rows so reads within a shard go in file order, then returns float32. On the full
+    MS MARCO corpus this is 6.8 GB on disk and ~0 bytes of process memory up front;
+    repeated queries are served from the OS page cache."""
+
+    def __init__(self, store: EmbeddingStore):
+        self.dim = store.dim
+        self._shards = [np.load(store.root / sh["file"], mmap_mode="r") for sh in store.meta["shards"]]
+        self._starts = np.cumsum([0] + [len(a) for a in self._shards]).astype(np.int64)
+        self.n = int(self._starts[-1])
+
+    def get(self, rows) -> np.ndarray:
+        """rows: int array of any shape (-1 = missing, returned as a zero vector)."""
+        rows = np.asarray(rows, dtype=np.int64)
+        flat = rows.ravel()
+        out = np.zeros((len(flat), self.dim), dtype=np.float32)
+        pos = np.nonzero(flat >= 0)[0]
+        if len(pos):
+            r = flat[pos]
+            if r.max() >= self.n:
+                raise IndexError(f"row {int(r.max())} out of range for {self.n} vectors")
+            order = np.argsort(r, kind="stable")
+            r, pos = r[order], pos[order]
+            bounds = np.searchsorted(r, self._starts)  # slice of r falling in each shard
+            for sh, arr in enumerate(self._shards):
+                lo, hi = bounds[sh], bounds[sh + 1]
+                if hi > lo:
+                    out[pos[lo:hi]] = arr[r[lo:hi] - self._starts[sh]]
+        return out.reshape(*rows.shape, self.dim)
+
+
+def refine_topk(Q: np.ndarray, cand: np.ndarray, vectors: VectorRows, k: int,
+                q_batch: int = 64) -> tuple[np.ndarray, np.ndarray]:
+    """Rescore ANN candidates [nq, k'] exactly and keep the top k. Missing (-1) candidates
+    sort last and come back as row -1 with score -inf. Queries go in chunks so the
+    gathered block stays small (64 x 1000 x 384 fp32 = 98 MB)."""
+    Q = np.ascontiguousarray(Q, dtype=np.float32)
+    cand = np.asarray(cand, dtype=np.int64)
+    kk = min(k, cand.shape[1])
+    out_s = np.empty((len(Q), kk), dtype=np.float32)
+    out_i = np.empty((len(Q), kk), dtype=np.int64)
+    for a in range(0, len(Q), q_batch):
+        c = cand[a : a + q_batch]
+        S = np.einsum("qd,qkd->qk", Q[a : a + q_batch], vectors.get(c))
+        S[c < 0] = -np.inf
+        top = np.argpartition(-S, kk - 1, axis=1)[:, :kk]
+        top_s = np.take_along_axis(S, top, 1)
+        order = np.argsort(-top_s, axis=1, kind="stable")
+        out_s[a : a + q_batch] = np.take_along_axis(top_s, order, 1)
+        out_i[a : a + q_batch] = np.take_along_axis(np.take_along_axis(c, top, 1), order, 1)
+    out_i[~np.isfinite(out_s)] = -1
+    return out_s, out_i
+
+
 def gather_rows(store: EmbeddingStore, rows: np.ndarray) -> np.ndarray:
-    """Fetch specific rows (any shape of indices) as float32, one pass over the shards."""
-    flat = np.asarray(rows).ravel()
-    out = np.zeros((len(flat), store.dim), dtype=np.float32)
-    for off, arr in store.shards():
-        mask = (flat >= off) & (flat < off + len(arr))
-        if mask.any():
-            out[mask] = arr[flat[mask] - off]
-    return out.reshape(*np.asarray(rows).shape, store.dim)
+    """Fetch specific rows (any shape of indices) as float32 (memory-mapped, no full load)."""
+    return VectorRows(store).get(rows)
 
 
 def recall_vs_exact(store: EmbeddingStore, Q: np.ndarray, exact_scores: np.ndarray, approx_ids: np.ndarray, k: int,
-                    tol: float = 1e-5) -> float:
+                    tol: float = 1e-5, vectors: VectorRows | None = None) -> float:
     """Tie-aware ANN recall@k: the fraction of approximate top-k hits whose *true* score
     reaches the exact k-th best score. Plain id overlap would punish equally good answers
     when scores tie; and PQ's returned distances are themselves approximate, so true
     scores are recomputed from the stored vectors."""
     ids = approx_ids[:, :k]
     valid = ids >= 0
-    vecs = gather_rows(store, np.where(valid, ids, 0))
+    vecs = (vectors or VectorRows(store)).get(np.where(valid, ids, -1))
     true = np.einsum("qd,qkd->qk", Q, vecs)
     kth = exact_scores[:, k - 1 : k]
     return float(np.mean((true >= kth - tol) & valid))

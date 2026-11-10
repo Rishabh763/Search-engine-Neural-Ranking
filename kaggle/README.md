@@ -47,14 +47,16 @@ Run 01, wait for it to finish, then 02, then 03 (each needs the previous outputs
 
 ## After Kaggle: bring results to the laptop
 
-Download from each version's **Output** tab (select files; don't download everything):
+Download each notebook's output with the Kaggle CLI (`pip install kaggle six`, an API token in `KAGGLE_API_TOKEN`), e.g. `kaggle kernels output <user>/02-dense-retrieval -p kaggle_out\nb02`, then move:
 
 | From | Files | Put them in |
 |---|---|---|
 | 03 | `results_bundle.zip` (trained models + all JSON reports) | unzip in the project root |
-| 02 | `indexes/msmarco-full/dense/msmarco-MiniLM-L6-cos-v5/` → `meta.json`, `ids.json`, the chosen `ivfpq48.faiss` or `ivfpq96.faiss` (+ its `.json`) | same path in the project |
+| 02 | `indexes/msmarco-full/` (dense: `meta.json`, `ids.json`, `emb_*.npy`, `ivfpq96.faiss` + `.json`; `docstore/`) | same path in the project |
 
-The 6.8 GB of embedding shards are not needed on the laptop: serving uses the IVF-PQ index.
+The 6.8 GB of embedding shards (`emb_*.npy`) are needed: serving keeps only the
+IVF-PQ index in RAM, but refines its top candidates with exact scores read from the
+shards (memory-mapped), which takes recall@10 vs exact from ~0.76 back towards 1.
 
 Then on the laptop (Elasticsearch for BM25 over 8.8M, and the full collection for passage text):
 
@@ -63,11 +65,17 @@ python scripts/prepare_data.py --name msmarco-full --corpus msmarco-passage --ev
 python scripts/build_index.py --collection msmarco-full --backend es
 python scripts/evaluate.py --collection msmarco-full --retriever bm25-es --eval-sets dl19 dl20
 
-python scripts/export_onnx.py --model models/ce-l6-dense-ft
+python scripts/ann_recall.py --collection msmarco-full --index ivfpq96 --nprobe 64 --refine 0 100 200 500 1000
+python scripts/evaluate.py --collection msmarco-full --retriever dense --dense-index ivfpq96 --nprobe 64 --refine 1000 --eval-sets dl19 dl20
+
+:: The fine-tuned reranker is statistically equivalent to the public one (see the main
+:: README), so serve the public model's ONNX export (scripts/export_onnx.py).
 set SEARCH_COLLECTION=msmarco-full
 set SEARCH_BACKEND=dense
 set DENSE_INDEX=ivfpq96
-set RERANK_MODEL=models\ce-l6-dense-ft-onnx
+set DENSE_NPROBE=64
+set DENSE_REFINE=1000
+set RERANK_MODEL=models\ms-marco-MiniLM-L-6-v2-onnx
 set RERANK_ONNX_VARIANT=fp16
 set RERANK_DEVICE=dml
 uvicorn searchengine.api:app --port 8000

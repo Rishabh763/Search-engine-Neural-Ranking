@@ -161,3 +161,103 @@ def test_dense_retriever_and_factory(encoded, tmp_path, monkeypatch):
     hits = hybrid.search(q, 10)
     assert len(hits) == 10
     assert type(build_docs("hybrid-local", coll, s, hybrid)).__name__ == "DocStore"
+
+
+# --- refinement: exact rescoring of ANN candidates -------------------------------------------
+
+def _all_vectors(store):
+    return np.concatenate([arr for _, arr in store.shards()])
+
+
+def test_vector_rows_matches_full_load(clustered_store):
+    from searchengine.dense.index import VectorRows
+
+    store, _ = clustered_store
+    full = _all_vectors(store)
+    vr = VectorRows(store)
+    assert vr.n == store.n == len(full) and len(store.meta["shards"]) > 1
+    rng = np.random.default_rng(0)
+    rows = rng.integers(0, store.n, size=(7, 40))
+    rows[0, :3] = [249, 250, 251]  # either side of a shard boundary (shard_size 250)
+    rows[1, :2] = rows[1, 2]  # duplicates
+    rows[2, 5] = -1  # missing -> zero vector
+    got = vr.get(rows)
+    assert got.shape == (7, 40, store.dim) and got.dtype == np.float32
+    want = np.where((rows >= 0)[..., None], full[np.maximum(rows, 0)], 0.0)
+    np.testing.assert_array_equal(got, want)
+    with pytest.raises(IndexError):
+        vr.get([store.n])
+
+
+def test_exact_topk_query_chunking_matches_brute_force(clustered_store):
+    store, enc = clustered_store
+    full = _all_vectors(store)
+    Q = enc.encode_queries([f"query {i}" for i in range(11)])
+    S = Q @ full.T
+    s, i = exact_topk(store, Q, 15, q_batch=4)  # chunks of 4, 4, 3 against every shard
+    np.testing.assert_allclose(s, -np.sort(-S, axis=1)[:, :15], rtol=1e-6)
+    np.testing.assert_allclose(np.take_along_axis(S, i, 1), s, rtol=1e-6)
+    s_all, _ = exact_topk(store, Q[:2], store.n + 50)  # k > N: returns all N, no padding
+    assert s_all.shape == (2, store.n) and np.isfinite(s_all).all()
+
+
+def test_refine_topk_rescoring_and_missing_candidates(clustered_store):
+    from searchengine.dense.index import VectorRows, refine_topk
+
+    store, enc = clustered_store
+    full = _all_vectors(store)
+    Q = enc.encode_queries(["alpha", "beta"])
+    cand = np.array([[5, 17, -1, 300, 42], [-1, -1, -1, -1, 9]])
+    s, i = refine_topk(Q, cand, VectorRows(store), k=3)
+    for q in range(2):
+        valid = [c for c in cand[q] if c >= 0]
+        exp = sorted(valid, key=lambda c: -float(Q[q] @ full[c]))[:3]
+        assert list(i[q][: len(exp)]) == exp
+        np.testing.assert_allclose(s[q][: len(exp)], [Q[q] @ full[c] for c in exp], rtol=1e-6)
+    assert list(i[1][1:]) == [-1, -1] and np.isneginf(s[1][1:]).all()  # only one real candidate
+
+
+def test_refinement_recovers_ivfpq_recall(clustered_store):
+    """48-d vectors in 8 bytes: PQ ordering is poor, but the true top 10 sits inside the
+    PQ top 100, so exact rescoring of those 100 restores it."""
+    from searchengine.dense.index import VectorRows, recall_vs_exact, refine_topk
+
+    store, enc = clustered_store
+    index, _ = build_faiss_index(store, "ivfpq", nlist=8, pq_m=8, train_size=600)
+    Q = enc.encode_queries([f"query {i}" for i in range(50)])
+    exact_s, _ = exact_topk(store, Q, 10)
+    set_search_params(index, nprobe=8, k=100)
+    _, plain = index.search(Q, 10)
+    _, cand = index.search(Q, 100)
+    _, refined = refine_topk(Q, cand, VectorRows(store), 10)
+    r_plain = recall_vs_exact(store, Q, exact_s, plain, 10)
+    r_ref = recall_vs_exact(store, Q, exact_s, refined, 10)
+    assert r_ref >= 0.95 and r_ref > r_plain + 0.2, (r_plain, r_ref)
+
+
+def test_dense_retriever_refine_end_to_end(clustered_store):
+    import faiss
+
+    from searchengine.retrieval.dense import DenseRetriever
+
+    store, enc = clustered_store
+    index, _ = build_faiss_index(store, "ivfpq", nlist=8, pq_m=8, train_size=600)
+    faiss.write_index(index, str(store.root / "ivfpq_t.faiss"))
+    plain = DenseRetriever.load(store.root, "ivfpq_t", device="cpu", nprobe=8, encoder=enc)
+    ref = DenseRetriever.load(store.root, "ivfpq_t", device="cpu", nprobe=8, encoder=enc, refine=100)
+    assert ref.name.endswith("+refine100") and ref.info()["refine"] == 100 and plain.info()["refine"] == 0
+    full = _all_vectors(store)
+    row = {d: j for j, d in enumerate(store.ids)}
+    q = "query 3"
+    qv = enc.encode_queries([q])[0]
+    hits = ref.search(q, k=10)
+    assert len(hits) == 10
+    for h in hits:  # refined scores are exact inner products, in descending order
+        assert h.score == pytest.approx(float(qv @ full[row[h.doc_id]]), rel=1e-5)
+    assert [h.score for h in hits] == sorted((h.score for h in hits), reverse=True)
+    best = -np.sort(-(full @ qv))[:10]
+    assert hits[0].score == pytest.approx(float(best[0]), rel=1e-5)
+    run = ref.batch_search({"a": "query 3", "b": "query 4"}, k=5)
+    assert set(run) == {"a", "b"} and all(len(v) == 5 for v in run.values())
+    with pytest.raises(ValueError):
+        DenseRetriever(enc, index, store.ids, "x", refine=10)  # refine without vectors

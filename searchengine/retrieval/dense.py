@@ -1,4 +1,5 @@
-"""Dense first-stage retriever: bi-encoder query embedding + FAISS search."""
+"""Dense first-stage retriever: bi-encoder query embedding + FAISS search,
+optionally refined with exact scores (see searchengine.dense.index.refine_topk)."""
 
 from __future__ import annotations
 
@@ -12,13 +13,23 @@ from searchengine.types import Hit, Queries, Run
 
 
 class DenseRetriever(Retriever):
-    def __init__(self, encoder, index, doc_ids: list[str], name: str, nprobe: int | None = 32, ef_search: int | None = 128):
+    """`refine` = k' > 0: fetch max(k, k') ANN candidates, rescore them exactly from the
+    stored vectors, keep the top k. Needs `vectors` (a VectorRows over the embedding shards).
+    Refining exactly k candidates only reorders them: it raises recall@10 but not
+    recall@k; k' > k also recovers true neighbours that PQ ranked below k."""
+
+    def __init__(self, encoder, index, doc_ids: list[str], name: str, nprobe: int | None = 32, ef_search: int | None = 128,
+                 refine: int = 0, vectors=None):
+        if refine and vectors is None:
+            raise ValueError("refine > 0 needs the stored vectors (VectorRows)")
         self.encoder = encoder
         self.index = index
         self.doc_ids = doc_ids
         self.name = name
         self.nprobe = nprobe
         self.ef_search = ef_search
+        self.refine = int(refine or 0)
+        self.vectors = vectors
 
     @classmethod
     def load(
@@ -29,11 +40,12 @@ class DenseRetriever(Retriever):
         nprobe: int | None = 32,
         ef_search: int | None = 128,
         encoder=None,
+        refine: int = 0,
     ) -> "DenseRetriever":
         import faiss
 
         from searchengine.dense.encoder import BiEncoder
-        from searchengine.dense.index import EmbeddingStore
+        from searchengine.dense.index import EmbeddingStore, VectorRows
 
         root = Path(root)
         store = EmbeddingStore(root)
@@ -45,14 +57,19 @@ class DenseRetriever(Retriever):
             enc_cfg["model"], device=device, max_length=enc_cfg.get("max_length"),
             query_prefix=enc_cfg.get("query_prefix"), passage_prefix=enc_cfg.get("passage_prefix"),
         )
-        name = f"dense-{kind}:{root.name}"
-        return cls(encoder, faiss.read_index(str(path)), store.ids, name, nprobe, ef_search)
+        name = f"dense-{kind}:{root.name}" + (f"+refine{refine}" if refine else "")
+        vectors = VectorRows(store) if refine else None
+        return cls(encoder, faiss.read_index(str(path)), store.ids, name, nprobe, ef_search, refine, vectors)
 
     def _search_vectors(self, Q: np.ndarray, k: int) -> list[list[Hit]]:
-        from searchengine.dense.index import set_search_params
+        from searchengine.dense.index import refine_topk, set_search_params
 
-        set_search_params(self.index, self.nprobe, self.ef_search, k)
-        D, I = self.index.search(np.ascontiguousarray(Q, dtype=np.float32), k)
+        Q = np.ascontiguousarray(Q, dtype=np.float32)
+        depth = max(k, self.refine) if self.refine else k
+        set_search_params(self.index, self.nprobe, self.ef_search, depth)
+        D, I = self.index.search(Q, depth)
+        if self.refine:
+            D, I = refine_topk(Q, I, self.vectors, k)
         return [[Hit(float(s), self.doc_ids[i]) for s, i in zip(drow, irow) if i >= 0] for drow, irow in zip(D, I)]
 
     def search(self, query: str, k: int = 1000) -> list[Hit]:
@@ -71,6 +88,7 @@ class DenseRetriever(Retriever):
 
     def info(self) -> dict:
         return {"name": self.name, "ntotal": int(self.index.ntotal), "nprobe": self.nprobe, "ef_search": self.ef_search,
+                "refine": self.refine,
                 "encoder": json.loads(json.dumps(self.encoder.config()))}
 
 

@@ -23,10 +23,46 @@ Query
 | 2 | Cross-encoder reranking, FastAPI search endpoint | **done** |
 | 3 | Dense retrieval (FAISS flat / HNSW / IVF-PQ), RRF hybrid fusion | **done** on 100K subset |
 | 5 | Latency: depth sweeps, ONNX fp32/fp16/int8, PyTorch int8, DirectML GPU, cross-machine benchmarks | **done** on one laptop |
-| 4 | Reranker fine-tuning on hard negatives mined by our dense retriever (LCE loss) | **built**, runs on Kaggle |
-| | Full 8.8M-passage corpus (BM25, exact dense on GPU, IVF-PQ) | **built**, runs on Kaggle: see [kaggle/](kaggle/README.md) |
+| 4 | Reranker fine-tuning on hard negatives mined by our dense retriever (LCE loss) | **done** on Kaggle (result: no gain, see below) |
+| | Full 8.8M-passage corpus (BM25, exact dense on GPU, IVF-PQ + exact refinement) | **done** on Kaggle; serving on the laptop: see [kaggle/](kaggle/README.md) |
 
 ## Results
+
+### Full MS MARCO passage corpus (8.8M passages)
+
+Encoding, exact dense search and training on a Kaggle T4; BM25 (local SciPy
+implementation) on 2 CPU cores. Dev = 6,980 MS MARCO dev queries; DL19/DL20 = TREC
+Deep Learning 2019/2020 (43 / 54 queries, graded judgments). Logs and reports:
+`runs/msmarco-full/` (not committed; reproduced by the [Kaggle notebooks](kaggle/README.md)).
+
+| Pipeline | dev MRR@10 | dev R@1000 | DL19 nDCG@10 | DL20 nDCG@10 |
+|---|---:|---:|---:|---:|
+| BM25 (k1=0.9, b=0.4) | 0.185 | 0.858 | 0.513 | 0.477 |
+| Dense, exact (msmarco-MiniLM-L6-cos-v5) | 0.324 | 0.948 | 0.659 | 0.647 |
+| BM25 → cross-encoder (top 100) | 0.365 | | 0.734 | 0.680 |
+| Dense → cross-encoder (top 100) | **0.400** | | **0.737** | **0.734** |
+
+- BM25 reproduces Anserini's published baseline from a from-scratch implementation:
+  MRR@10 0.1850 vs 0.1840, and vs Anserini's 8-bit-quantized BM25 regression
+  0.1839 / R@100 0.6604 / R@1000 0.8562 (ours: 0.1850 / 0.6626 / 0.8576). Dense matches
+  the bi-encoder's model card (MRR@10 32.27); dense + cross-encoder is in line with the
+  reranker's card (39.01, candidate set not stated there).
+- **Fine-tuning the reranker on our own hard negatives did not help.** 200K training
+  queries, 15 negatives each mined by exact dense search (ranks 4-100), grouped LCE
+  loss, one epoch, 56 min on a T4. Against the public model, on the same candidates:
+  dev MRR@10 diff -0.0001 (BM25) / -0.0003 (dense), 95% CI within +/-0.004 (n=6,980),
+  so the two are statistically equivalent, not just "not significantly different".
+  The public model was trained with distillation from a large teacher ensemble;
+  binary labels with partly-false negatives carry no new information for it.
+- **Training from the base LM with the same data and budget costs 0.05 MRR**
+  (dev 0.317 vs 0.365 on BM25 candidates, p < 1e-4): the value of the public model's
+  larger training run and distillation, measured.
+- IVF-PQ compresses the 6.8 GB of fp16 vectors to 0.9 GB (96 bytes/vector), but alone
+  finds only 76% of the exact top 10 (48 bytes: 60%). Rescoring the top k'
+  candidates with the stored vectors (memory-mapped, `--refine`) recovers it:
+  measured per machine with `scripts/ann_recall.py`.
+
+### 100K-passage subset (laptop)
 
 All on the 100K-passage subset (`msmarco-100k`: every judged passage for the
 sampled queries plus a random fill). TREC DL nDCG here is close to full-corpus
@@ -141,6 +177,8 @@ python scripts/build_dense_index.py --collection msmarco-100k --type flat
 python scripts/build_dense_index.py --collection msmarco-100k --type hnsw
 python scripts/build_dense_index.py --collection msmarco-100k --type ivfpq
 python scripts/evaluate.py --collection msmarco-100k --retriever dense --dense-index flat
+python scripts/ann_recall.py --collection msmarco-full --index ivfpq96 --nprobe 64 --refine 0 100 200 500 1000
+python scripts/evaluate.py --collection msmarco-full --retriever dense --dense-index ivfpq96 --nprobe 64 --refine 1000
 python scripts/evaluate.py --collection msmarco-100k --retriever hybrid-es
 python scripts/compare_runs.py runs\msmarco-100k\dl19\bm25-es.json "runs\msmarco-100k\dl19\rrf(bm25-es+dense-flat-msmarco-MiniLM-L6-cos-v5).json" --metric recall@1000
 ```
@@ -249,7 +287,8 @@ searchengine/
   text.py        analyzer mirroring ES `english` (BM25 only; neural models get raw text)
   index/es.py    index definition, bulk loading, k1/b updates without reindexing
   retrieval/     Retriever interface; LocalBM25, ElasticsearchBM25, DenseRetriever, RRFHybrid
-  dense/         BiEncoder (prefix registry), resumable sharded encoding, FAISS flat/HNSW/IVF-PQ
+  dense/         BiEncoder (prefix registry), resumable sharded encoding, FAISS flat/HNSW/IVF-PQ,
+                 memory-mapped vector access and exact refinement of ANN candidates
   ranking/       CrossEncoderReranker (fp32 / fp16 / dynamic int8), OnnxCrossEncoderReranker + export
   training/      hard-negative mining, cross-encoder fine-tuning (grouped LCE loss, AMP, checkpoints)
   pipeline.py    retrieve -> fetch text -> rerank, timed per stage; rerank_run for offline eval
@@ -261,7 +300,7 @@ searchengine/
 kaggle/          three notebooks for the full corpus + training on free Kaggle GPUs
 scripts/         prepare_data, prepare_train, build_index, evaluate, rerank, compare_runs,
                  mine_negatives, train_reranker,
-                 encode_corpus, build_dense_index, export_onnx, depth_sweep, plot_tradeoff,
+                 encode_corpus, build_dense_index, ann_recall, export_onnx, depth_sweep, plot_tradeoff,
                  benchmark, compare_benchmarks, load_test, check_analyzer, check_bm25_parity, es_latency_probe
 tests/           unit tests incl. tiny randomly initialized models (no downloads)
 results/         committed benchmark and load-test results from each machine
@@ -288,6 +327,17 @@ docs/            charts used in this README
 - **ANN recall is measured tie-aware against exact search** (an approximate hit
   counts if its true score reaches the exact k-th score), separating index error
   from model error.
+- **IVF-PQ has two separate error sources, fixed differently.** Too few cells probed
+  (nprobe) loses true neighbours entirely; no refinement depth brings them back.
+  Product quantization keeps them but misorders them; exact rescoring of the top k'
+  fixes that. Refining exactly k candidates raises recall@10 but not recall@k:
+  it reorders, it does not find new documents.
+- **A negative result, reported as one.** Fine-tuning a distilled reranker on binary
+  labels was equivalent to not fine-tuning (tight CI on 6,980 queries); the from-base
+  control quantifies what the public model's training recipe is worth.
+- **Measure the data path, not just the model.** On Kaggle, reading passage text by
+  random seeks from the network-mounted input ran training at ~15 pairs/s; copying the
+  collection to local disk first gave ~470 pairs/s, with bit-identical losses.
 - **Hybrid fusion only helps if both retrievers are decent**: RRF gives rank-based
   votes, so a weak retriever's noise costs the strong one. Measured, not assumed.
 - **Run files keep full float precision.** Rounding scores to 6 decimals turned

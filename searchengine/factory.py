@@ -24,8 +24,10 @@ def build_retriever(
     ef_search: int = 128,
     rrf_k: int = 60,
     fusion_depth: int = 1000,
+    refine: int = 0,
 ):
-    """backend: local | es | dense | dense-exact | hybrid-es | hybrid-local."""
+    """backend: local | es | dense | dense-exact | hybrid-es | hybrid-local.
+    refine: dense ANN only; rescore this many candidates exactly (0 = off)."""
     if backend == "local":
         from searchengine.retrieval.bm25_local import LocalBM25
 
@@ -42,7 +44,7 @@ def build_retriever(
 
         model = dense_model or default_dense_model()
         root = dense_dir(s.index_dir, coll.name, model_slug(model))
-        return DenseRetriever.load(root, dense_index, device=device, nprobe=nprobe, ef_search=ef_search)
+        return DenseRetriever.load(root, dense_index, device=device, nprobe=nprobe, ef_search=ef_search, refine=refine)
     if backend == "dense-exact":
         from searchengine.dense.encoder import default_dense_model, model_slug
         from searchengine.dense.index import dense_dir
@@ -55,7 +57,7 @@ def build_retriever(
 
         sparse = build_retriever(backend.split("-", 1)[1], coll, s, index_name=index_name)
         dense = build_retriever("dense", coll, s, dense_model=dense_model, dense_index=dense_index,
-                                device=device, nprobe=nprobe, ef_search=ef_search)
+                                device=device, nprobe=nprobe, ef_search=ef_search, refine=refine)
         return RRFHybrid([sparse, dense], k_rrf=rrf_k, depth=fusion_depth)
     raise ValueError(f"backend must be local, es, dense, hybrid-es or hybrid-local; got {backend!r}")
 
@@ -100,12 +102,14 @@ def build_pipeline(
     quantize: str | None = None,
     onnx_variant: str = "int8",
     dense_index: str = "flat",
+    nprobe: int = 32,
+    refine: int = 0,
 ) -> SearchPipeline:
     s = settings or get_settings()
     coll = Collection.from_name(collection, s.data_dir)
     # The dense query encoder runs on PyTorch, which has no DirectML device: "dml" only
     # applies to ONNX rerankers, so the encoder falls back to auto (CPU / CUDA / MPS).
     torch_device = device if device in ("auto", "cpu", "cuda", "mps") else "auto"
-    retriever = build_retriever(backend, coll, s, dense_index=dense_index, device=torch_device)
+    retriever = build_retriever(backend, coll, s, dense_index=dense_index, device=torch_device, nprobe=nprobe, refine=refine)
     reranker = build_reranker(model, device, quantize=quantize, onnx_variant=onnx_variant)
     return SearchPipeline(retriever, build_docs(backend, coll, s, retriever), reranker)
