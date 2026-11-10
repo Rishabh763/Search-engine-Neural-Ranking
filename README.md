@@ -57,10 +57,30 @@ Deep Learning 2019/2020 (43 / 54 queries, graded judgments). Logs and reports:
 - **Training from the base LM with the same data and budget costs 0.05 MRR**
   (dev 0.317 vs 0.365 on BM25 candidates, p < 1e-4): the value of the public model's
   larger training run and distillation, measured.
-- IVF-PQ compresses the 6.8 GB of fp16 vectors to 0.9 GB (96 bytes/vector), but alone
-  finds only 76% of the exact top 10 (48 bytes: 60%). Rescoring the top k'
-  candidates with the stored vectors (memory-mapped, `--refine`) recovers it:
-  measured per machine with `scripts/ann_recall.py`.
+- **Serving the dense stage from a 0.9 GB IVF-PQ index (96 bytes/vector) instead of
+  6.8 GB of vectors.** Measured on the laptop (`scripts/ann_recall.py`, 1,000 dev
+  queries, latency on fresh queries with cold SSD reads):
+
+  | nprobe | refine k' | recall@10 vs exact | recall@100 vs exact | single-query p50 |
+  |---:|---:|---:|---:|---:|
+  | 64 | 0 | 0.767 | 0.754 | 6.5 ms |
+  | 64 | 100 | 0.894 | 0.754 | 15.6 ms |
+  | 128 | 200 | 0.930 | 0.873 | 28.1 ms |
+  | 256 | 100 | 0.956 | 0.806 | 31.6 ms |
+  | 256 | 200 | 0.956 | 0.909 | 41.4 ms |
+  | 256 | 500 | 0.956 | 0.921 | 71.0 ms |
+
+  Two separate errors: product quantization *misorders* neighbours (exact rescoring of
+  the top 100 from the memory-mapped vectors fixes all of it, +0.13 to +0.15 at every
+  nprobe), and the coarse quantizer *misses* cells (only nprobe helps: misses
+  10.6% -> 7.0% -> 4.4% per doubling). Costs: ~0.085 ms per probed cell, ~90 us per
+  refined row (a cold page fault; ~10 us when cached).
+- **The ANN loss is real end to end, and reranking amplifies it.** At nprobe 256,
+  k' 200: dev MRR@10 0.317 vs 0.324 exact (-0.007, 95% CI [-0.009, -0.005]); after
+  reranking the top 100 (same ONNX model on both), DL19+DL20 nDCG@10 0.704 vs 0.736
+  (-0.031, p < 1e-4), larger than the first-stage gap of -0.023. A relevant passage
+  the ANN misses at rank 40 barely moves first-stage nDCG@10, but the cross-encoder
+  would have promoted it into the top 10: in a cascade, candidate recall is the ceiling.
 
 ### 100K-passage subset (laptop)
 
@@ -332,6 +352,13 @@ docs/            charts used in this README
   Product quantization keeps them but misorders them; exact rescoring of the top k'
   fixes that. Refining exactly k candidates raises recall@10 but not recall@k:
   it reorders, it does not find new documents.
+- **In a cascade, first-stage recall matters more, not less.** Approximate search that
+  costs 0.023 nDCG@10 on its own costs 0.031 after a strong reranker, because the
+  reranker can only promote what it is given. With reranking at ~900 ms per query on
+  the iGPU, the dense stage (~40 ms) is the cheap place to buy quality back.
+- **Same model, two runtimes, same answer.** The reranker as ONNX fp16 on an AMD iGPU
+  (DirectML) and as PyTorch fp16 on an NVIDIA T4 agree within 0.0012 nDCG@10 on
+  DL19/DL20.
 - **A negative result, reported as one.** Fine-tuning a distilled reranker on binary
   labels was equivalent to not fine-tuning (tight CI on 6,980 queries); the from-base
   control quantifies what the public model's training recipe is worth.
