@@ -1,19 +1,17 @@
 @echo off
 REM Live demo: the full-corpus search API on this laptop, reachable from the deployed frontend.
 REM
-REM   scripts\start_demo.bat https://<your-app>.vercel.app
+REM   scripts\start_demo.bat                 (uses https://search-engine-neural-ranking.vercel.app)
+REM   scripts\start_demo.bat https://<other-app>.vercel.app
 REM
 REM Opens two windows: the API (uvicorn), then a Cloudflare quick tunnel once the API answers.
 REM The tunnel window prints https://<random-words>.trycloudflare.com. Share:
-REM   https://<your-app>.vercel.app/?api=https://<random-words>.trycloudflare.com
+REM   https://search-engine-neural-ranking.vercel.app/?api=https://<random-words>.trycloudflare.com
 REM Close both windows to stop. The tunnel address changes every time.
 
 setlocal
-if "%~1"=="" (
-  echo Usage: scripts\start_demo.bat https://your-app.vercel.app
-  exit /b 1
-)
-set "ORIGIN=%~1"
+set "ORIGIN=https://search-engine-neural-ranking.vercel.app"
+if not "%~1"=="" set "ORIGIN=%~1"
 if "%ORIGIN:~-1%"=="/" set "ORIGIN=%ORIGIN:~0,-1%"
 
 cd /d "%~dp0.."

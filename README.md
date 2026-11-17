@@ -5,6 +5,9 @@ retrieval for recall, rank fusion, then a cross-encoder reranker for precision.
 Every claim is backed by standard IR metrics, significance tests, and measured
 latency percentiles, with the hardware recorded alongside every number.
 
+**Live demo:** [search-engine-neural-ranking.vercel.app](https://search-engine-neural-ranking.vercel.app). Searches run live on my laptop when it is
+serving; otherwise the page shows recorded searches, labelled as such.
+
 ```text
 Query
   ├── BM25 (Elasticsearch)        → top 1000
@@ -307,7 +310,7 @@ npm install
 npm run dev          :: http://localhost:5173, with the API on port 8000
 ```
 
-Deployed, the page is static (Vercel) and the API stays on the laptop behind a Cloudflare
+Deployed at <https://search-engine-neural-ranking.vercel.app>: the page is static (Vercel) and the API stays on the laptop behind a Cloudflare
 quick tunnel; when the laptop is off it shows recorded searches
 (`scripts/capture_samples.py`). Steps: [Frontend/README.md](Frontend/README.md).
 

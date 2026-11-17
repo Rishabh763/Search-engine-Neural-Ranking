@@ -50,14 +50,14 @@ python scripts/capture_samples.py
 
    ```bat
    winget install --id Cloudflare.cloudflared
-   set CORS_ORIGINS=https://<your-app>.vercel.app,http://localhost:5173
+   set CORS_ORIGINS=https://search-engine-neural-ranking.vercel.app,http://localhost:5173
    uvicorn searchengine.api:app --port 8000
    :: in a second terminal
    cloudflared tunnel --url http://localhost:8000
    ```
 
    cloudflared prints `https://<random-words>.trycloudflare.com`. Share
-   `https://<your-app>.vercel.app/?api=https://<random-words>.trycloudflare.com`.
+   `https://search-engine-neural-ranking.vercel.app/?api=https://<random-words>.trycloudflare.com`.
    The tunnel lives while cloudflared runs and gets a new address every time, so send a
    fresh link for each demo. Anyone with the link can search (the API is read-only);
    the reranker serves one request at a time, so heavy traffic queues.
