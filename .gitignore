@@ -27,3 +27,6 @@ Frontend/dist/
 Thumbs.db
 .vscode/
 .idea/
+
+# Cloudflare tunnel binary, if downloaded into the project instead of installed
+cloudflared-windows-amd64.exe

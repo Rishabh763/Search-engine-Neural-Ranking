@@ -40,7 +40,12 @@ export default function App() {
       .then((h) => !cancelled && setCheck({ apiBase, status: 'live', health: h, error: null }))
       .catch((e) => {
         if (cancelled) return
-        const why = e.name === 'AbortError' ? 'no answer within 5 seconds' : e.message
+        const why =
+          e.name === 'AbortError'
+            ? 'No answer within 5 seconds.'
+            : e instanceof TypeError
+              ? 'No server answered at this address, or it does not allow requests from this page.'
+              : e.message
         setCheck({ apiBase, status: 'offline', health: null, error: why })
       })
     return () => {
