@@ -22,6 +22,9 @@ Configuration (environment variables):
     SEARCH_CANDIDATES   default `candidates` per request (default 100; on the full corpus
                         20 gives 3x the throughput for -0.023 nDCG@10, see README)
     SEARCH_DEDUP        collapse near-duplicate passages by default (default 1; 0 = off)
+    CORS_ORIGINS        comma-separated origins allowed to call the API from a browser, e.g.
+                        the deployed frontend https://<app>.vercel.app, or * for any
+                        (default: the local Vite dev and preview servers)
 
 Endpoints are plain `def` (not `async def`): retrieval and model inference are
 blocking, CPU/GPU-bound calls, and FastAPI runs `def` endpoints in a worker
@@ -35,11 +38,13 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from searchengine.pipeline import SearchPipeline
 
 SNIPPET_CHARS = 300
+LOCAL_FRONTENDS = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173"
 
 
 def sigmoid(x: float) -> float:
@@ -107,19 +112,44 @@ def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None)
             )
             state["meta"] = {"collection": collection, "backend": backend}
             # Warm up so the first real request doesn't pay model/JIT/cache start-up.
-            state["pipeline"].search("warm up query", k=10, candidates=20)
+            state["pipeline"].search("warm up query", k=10, candidates=20, dedup=True)
         yield
 
-    app = FastAPI(title="Large-Scale Search Engine", version="0.3.0", lifespan=lifespan)
+    app = FastAPI(title="Large-Scale Search Engine", version="0.4.0", lifespan=lifespan)
+    # Read-only GET API, no cookies or credentials: allowing the frontend's origin is all a
+    # browser needs. A deployed frontend is added through CORS_ORIGINS.
+    origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", LOCAL_FRONTENDS).split(",") if o.strip()]
+    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET"], allow_headers=["*"])
+
+    def machine() -> str | None:
+        """The serving machine in one line (CPU, cores, GPU), computed once."""
+        if "machine" not in state:
+            try:
+                from searchengine.envinfo import environment_info, short_label
+
+                state["machine"] = short_label(environment_info())
+            except Exception:  # noqa: BLE001 - informational only
+                state["machine"] = None
+        return state["machine"]
 
     @app.get("/health")
     def health() -> dict:
         p: SearchPipeline = state["pipeline"]
+        info = getattr(p.retriever, "info", None)
+        try:
+            n_docs = len(p.docs)
+        except TypeError:
+            n_docs = None
         return {
             "status": "ok",
             **state["meta"],
+            "version": app.version,
             "retriever": p.retriever.name,
+            "retriever_info": info() if callable(info) else None,
             "reranker": p.reranker.info() if p.reranker else None,
+            "n_docs": n_docs,
+            "defaults": {"candidates": default_candidates, "dedup": default_dedup},
+            "machine": machine(),
         }
 
     @app.get("/search", response_model=SearchResponse)

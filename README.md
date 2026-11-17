@@ -26,6 +26,7 @@ Query
 | 4 | Reranker fine-tuning on hard negatives mined by our dense retriever (LCE loss) | **done** on Kaggle (result: no gain, see below) |
 | | Full 8.8M-passage corpus (BM25, exact dense on GPU, IVF-PQ + exact refinement) | **done** on Kaggle; serving on the laptop: see [kaggle/](kaggle/README.md) |
 | | Near-duplicate collapsing at serving time (shingle containment, after reranking) | **done**, on by default |
+| | Web frontend (React + Vite) with per-stage latency; Vercel + Cloudflare tunnel deployment | **done**: see [Frontend/](Frontend/README.md) |
 
 ## Results
 
@@ -138,17 +139,24 @@ now collapses them after reranking and refills from the candidates (`searchengin
 word 3-shingle *containment* >= 0.8, which also catches truncated copies that Jaccard
 misses; 0.4 ms p50 per query). Measured with `scripts/dedup_stats.py`:
 
-| Top 10 | DL19 | DL20 |
-|---|---:|---:|
-| distinct relevant passages, before -> after | 4.88 -> 6.23 | 4.52 -> 5.11 |
-| nDCG@10 (scores ids, not content), before -> after | 0.733 -> 0.715 | 0.729 -> 0.684 |
+| Top 10, before -> after | DL19 | DL20 | dev (first 400 queries) |
+|---|---:|---:|---:|
+| queries with a copy in the top 10 | 79% | 80% | 81% |
+| distinct relevant passages | 4.88 -> 6.23 | 4.52 -> 5.11 | 0.67 -> 0.70 |
+| group-aware RR@10 (a copy of a judged passage counts) | 0.917 -> 0.919 | 0.840 -> 0.848 | 0.375 -> 0.386 |
+| official metric (scores ids, not content) | nDCG 0.733 -> 0.715 | nDCG 0.729 -> 0.684 | MRR 0.340 -> 0.322 |
 
 The two rows disagree, and the first is the one a user sees. 96% of the judged-relevant
 copies that collapsing removed (128 of 133) were represented by a passage that is itself
 judged relevant, so nDCG was paying the uncollapsed ranking twice for showing the same
 text: it scores document ids and does not penalise redundancy (alpha-nDCG was designed for
 that). The pooled nDCG drop (-0.033, 95% CI [-0.047, -0.020]) is therefore a property of
-the metric, reported rather than hidden. Sampled pairs at the 0.8 boundary are overlapping
+the metric, reported rather than hidden. On dev the mechanism is the mirror image: about one
+passage per query is judged, and in all 41 cases where collapsing removed a judged passage,
+an *unjudged* copy of it ranked higher and was kept, so the user still sees that text,
+earlier. The same effect exists without collapsing: group-aware RR@10 is 0.375 against the
+official 0.340, i.e. MS MARCO's sparse labels already miss ~3.5 points of MRR where a copy
+of the judged passage ranks above it. Sampled pairs at the 0.8 boundary are overlapping
 windows of one source text (a Wikipedia article shifted by a sentence), so the threshold
 trades a little extra context for not repeating the rest; at 0.9 and 0.95 the gain is still
 +1.0 to +1.2 (DL19) and +0.5 to +0.6 (DL20) distinct relevant passages.
@@ -286,6 +294,23 @@ Backends: `es`, `local`, `dense`, `hybrid-es`, `hybrid-local`. Reranker via
 `RERANK_MODEL` (HF id, local checkpoint, ONNX export dir, or `none`),
 `RERANK_QUANTIZE=int8`, `RERANK_ONNX_VARIANT=int8|fp32`.
 
+### Web frontend
+
+`Frontend/` is a single page over the API: results with the reranker's score, how far
+reranking moved each passage and which copies were folded in, plus the query's cascade
+(8.8M passages narrowed to the few shown) and where its time went, stage by stage,
+including the network round trip, with a running median and p95 for the session.
+
+```bat
+cd Frontend
+npm install
+npm run dev          :: http://localhost:5173, with the API on port 8000
+```
+
+Deployed, the page is static (Vercel) and the API stays on the laptop behind a Cloudflare
+quick tunnel; when the laptop is off it shows recorded searches
+(`scripts/capture_samples.py`). Steps: [Frontend/README.md](Frontend/README.md).
+
 ### Load testing the API
 
 ```bat
@@ -387,13 +412,14 @@ searchengine/
   docstore.py    byte-offset random access to passages (ES backends use _mget)
   eval/          metrics (= trec_eval), randomization test, TREC IO, latency, depth sweep
   envinfo.py     hardware/software fingerprint stored in every report
-  api.py         FastAPI /search, /health
+  api.py         FastAPI /search, /health (engine configuration), CORS for the web frontend
   factory.py     builds retrievers / doc sources / rerankers / pipelines from settings
+Frontend/        React + Vite page: results, per-stage latency, recorded fallback (Vercel)
 kaggle/          three notebooks for the full corpus + training on free Kaggle GPUs
 scripts/         prepare_data, prepare_train, build_index, evaluate, rerank, compare_runs,
                  mine_negatives, train_reranker,
                  encode_corpus, build_dense_index, ann_recall, dedup_stats, export_onnx, depth_sweep, plot_tradeoff,
-                 benchmark, compare_benchmarks, load_test, check_analyzer, check_bm25_parity, es_latency_probe
+                 benchmark, compare_benchmarks, load_test, capture_samples, check_analyzer, check_bm25_parity, es_latency_probe
 tests/           unit tests incl. tiny randomly initialized models (no downloads)
 results/         committed benchmark and load-test results from each machine
 docs/            charts used in this README

@@ -92,3 +92,31 @@ def test_sigmoid_is_overflow_safe():
     from searchengine.api import sigmoid
 
     assert sigmoid(1000) == 1.0 and sigmoid(-1000) == 0.0 and sigmoid(0) == 0.5
+
+
+def test_health_reports_configuration(client):
+    body = client.get("/health").json()
+    assert body["n_docs"] == 600 and body["version"]
+    assert body["defaults"] == {"candidates": 100, "dedup": True}
+    assert "retriever_info" in body and "machine" in body  # LocalBM25 has no info(): None
+
+
+def test_cors_allows_only_configured_origins(toy_collection, tmp_path, monkeypatch):
+    coll, docs, _, _ = toy_collection
+    pipe = SearchPipeline(LocalBM25.build(docs), DocStore.open(coll, tmp_path), None)
+    monkeypatch.setenv("CORS_ORIGINS", "https://demo.example.app")
+    with TestClient(create_app(pipe, {"collection": "toy", "backend": "local"})) as c:
+        ok = c.get("/health", headers={"Origin": "https://demo.example.app"})
+        other = c.get("/health", headers={"Origin": "https://elsewhere.example"})
+        pre = c.options("/search", headers={"Origin": "https://demo.example.app", "Access-Control-Request-Method": "GET"})
+    assert ok.headers.get("access-control-allow-origin") == "https://demo.example.app"
+    assert "access-control-allow-origin" not in other.headers
+    assert pre.status_code == 200
+    monkeypatch.setenv("CORS_ORIGINS", "*")
+    with TestClient(create_app(pipe, {})) as c:
+        assert c.get("/health", headers={"Origin": "https://any.example"}).headers["access-control-allow-origin"] == "*"
+
+
+def test_cors_default_allows_local_vite(client):
+    r = client.get("/health", headers={"Origin": "http://localhost:5173"})
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:5173"

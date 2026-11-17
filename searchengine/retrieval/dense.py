@@ -87,8 +87,14 @@ class DenseRetriever(Retriever):
         return run
 
     def info(self) -> dict:
+        try:  # IVF indexes: how many cells nprobe is chosen from
+            import faiss
+
+            nlist = int(faiss.extract_index_ivf(self.index).nlist)
+        except Exception:  # noqa: BLE001 - flat / HNSW have no cells
+            nlist = None
         return {"name": self.name, "ntotal": int(self.index.ntotal), "nprobe": self.nprobe, "ef_search": self.ef_search,
-                "refine": self.refine,
+                "nlist": nlist, "refine": self.refine,
                 "encoder": json.loads(json.dumps(self.encoder.config()))}
 
 
