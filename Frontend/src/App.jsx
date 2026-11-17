@@ -230,11 +230,22 @@ export default function App() {
                 recordedAt={result.recordedAt}
               />
               {result.response.results.length ? (
-                <ol className="results">
-                  {result.response.results.map((r) => (
-                    <Result key={r.id} r={r} terms={terms} reranked={result.response.reranked} />
-                  ))}
-                </ol>
+                <>
+                  <ol className="results">
+                    {result.response.results.map((r) => (
+                      <Result key={r.id} r={r} terms={terms} reranked={result.response.reranked} />
+                    ))}
+                  </ol>
+                  {result.response.dedup &&
+                    result.response.collapsed > 0 &&
+                    result.response.results.length + result.response.filtered_out < result.params.k && (
+                      <p className="shortfall">
+                        Only {result.response.results.length + result.response.filtered_out} distinct passages were among the{' '}
+                        {result.params.candidates} candidates: the other {result.response.collapsed} were copies.
+                        {live ? ' Rerank more candidates to fill the page.' : ''}
+                      </p>
+                    )}
+                </>
               ) : (
                 <p className="empty">No passages matched. Try fewer or more common words.</p>
               )}

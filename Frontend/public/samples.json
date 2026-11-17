@@ -1,0 +1,980 @@
+{
+ "captured_utc": "2026-11-17T11:09:52+00:00",
+ "health": {
+  "status": "ok",
+  "collection": "msmarco-full",
+  "backend": "dense",
+  "version": "0.4.0",
+  "retriever": "dense-ivfpq96:msmarco-MiniLM-L6-cos-v5+refine500",
+  "retriever_info": {
+   "name": "dense-ivfpq96:msmarco-MiniLM-L6-cos-v5+refine500",
+   "ntotal": 8841823,
+   "nprobe": 1024,
+   "ef_search": 128,
+   "nlist": 8192,
+   "refine": 500,
+   "encoder": {
+    "model": "sentence-transformers/msmarco-MiniLM-L6-cos-v5",
+    "dim": 384,
+    "normalized": true,
+    "query_prefix": "",
+    "passage_prefix": "",
+    "max_length": 256
+   }
+  },
+  "reranker": {
+   "name": "onnx-fp16-dml:ms-marco-MiniLM-L-6-v2",
+   "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+   "runtime": "onnxruntime",
+   "variant": "fp16",
+   "graph_fused": true,
+   "device": "dml",
+   "provider": "DmlExecutionProvider",
+   "max_length": 512,
+   "batch_size": 64,
+   "file_mb": 43.4
+  },
+  "n_docs": 8841823,
+  "defaults": {
+   "candidates": 100,
+   "dedup": true
+  },
+  "machine": "AMD Ryzen 5 5500U with Radeon Graphics, 6 cores, AMD Radeon(TM) Graphics via DirectML"
+ },
+ "samples": [
+  {
+   "query": "how do vaccines train the immune system",
+   "params": {
+    "k": 10,
+    "candidates": 20,
+    "rerank": "true",
+    "dedup": "true"
+   },
+   "client_ms": 342.5,
+   "response": {
+    "query": "how do vaccines train the immune system",
+    "retriever": "dense-ivfpq96:msmarco-MiniLM-L6-cos-v5+refine500",
+    "k": 10,
+    "candidates": 20,
+    "reranked": true,
+    "filtered_out": 0,
+    "dedup": true,
+    "collapsed": 7,
+    "results": [
+     {
+      "rank": 1,
+      "id": "4862184",
+      "title": "",
+      "snippet": "Vaccines are like a training course for the immune system. They prepare the body to fight disease without exposing it to disease symptoms. When foreign invaders such as bacteria or viruses enter the body, immune cells called lymphocytes respond by producing antibodies, which are protein molecules.",
+      "score": 8.296875,
+      "first_stage_score": 0.7734599709510803,
+      "first_stage_rank": 1,
+      "rerank_score": 8.296875,
+      "duplicates": [],
+      "relevance": 0.9998
+     },
+     {
+      "rank": 2,
+      "id": "2337132",
+      "title": "",
+      "snippet": "Vaccines work by stimulating our immune system to produce antibodies (substances produced by the body to fight disease) without actually infecting us with the disease. They trigger the immune system to produce its own antibodies, as though the body has been infected with a disease. This is called ac...",
+      "score": 8.0703125,
+      "first_stage_score": 0.6908613443374634,
+      "first_stage_rank": 6,
+      "rerank_score": 8.0703125,
+      "duplicates": [
+       "2337131",
+       "1540235",
+       "4504580",
+       "4504586"
+      ],
+      "relevance": 0.9997
+     },
+     {
+      "rank": 3,
+      "id": "7762230",
+      "title": "",
+      "snippet": "Vaccines bolster the body's immune system to better attack viruses in the complete particle stage, outside of the organism's cells. They traditionally consist of an attenuated (a live weakened) or inactivated (killed) version of the virus.",
+      "score": 7.05859375,
+      "first_stage_score": 0.6551260948181152,
+      "first_stage_rank": 18,
+      "rerank_score": 7.05859375,
+      "duplicates": [],
+      "relevance": 0.9991
+     },
+     {
+      "rank": 4,
+      "id": "3128012",
+      "title": "",
+      "snippet": "How Vaccines Work. The human immune system is a complex network of cells and organs that evolved to fight off infectious microbes. Much of the immune system’s work is carried out by an army of various specialized cells, each type designed to fight disease in a particular way. The invading microbes f...",
+      "score": 6.63671875,
+      "first_stage_score": 0.6589937806129456,
+      "first_stage_rank": 14,
+      "rerank_score": 6.63671875,
+      "duplicates": [],
+      "relevance": 0.9987
+     },
+     {
+      "rank": 5,
+      "id": "4250105",
+      "title": "",
+      "snippet": "How Vaccines Work Vaccines help develop immunity by imitating an infection. This type of infection, however, does not cause illness, but it does cause the immune system to produce T-lymphocytes and antibodies.Sometimes, after getting a vaccine, the imitation infection can cause minor symptoms, such ...",
+      "score": 6.63671875,
+      "first_stage_score": 0.6576482057571411,
+      "first_stage_rank": 16,
+      "rerank_score": 6.63671875,
+      "duplicates": [
+       "4862186",
+       "4862187"
+      ],
+      "relevance": 0.9987
+     },
+     {
+      "rank": 6,
+      "id": "3267486",
+      "title": "",
+      "snippet": "How Vaccines Work: Vaccines stimulate the immune system to produce antibodies (titer) against a disease organism so that the cat is protected against various pathogens in its environment. If the immunized cat is later exposed to the infectious agent, these antibodies react quickly to attack and neut...",
+      "score": 6.54296875,
+      "first_stage_score": 0.6658924221992493,
+      "first_stage_rank": 10,
+      "rerank_score": 6.54296875,
+      "duplicates": [],
+      "relevance": 0.9986
+     },
+     {
+      "rank": 7,
+      "id": "824135",
+      "title": "",
+      "snippet": "The vaccine works by triggering the immune system to produce antibodies against measles, mumps and rubella. If you or your child then comes into contact with one of the diseases, the immune system will recognise it and immediately produce the antibodies needed to fight it.",
+      "score": 6.3515625,
+      "first_stage_score": 0.6547516584396362,
+      "first_stage_rank": 19,
+      "rerank_score": 6.3515625,
+      "duplicates": [],
+      "relevance": 0.9983
+     },
+     {
+      "rank": 8,
+      "id": "4862188",
+      "title": "",
+      "snippet": "Vaccines are medicines that boost the immune system's natural ability to protect the body against “foreign invaders,” mainly infectious agents, that may cause disease. The immune system is a complex network of organs, tissues, and specialized cells that act collectively to defend the body.",
+      "score": 6.26953125,
+      "first_stage_score": 0.7025734186172485,
+      "first_stage_rank": 2,
+      "rerank_score": 6.26953125,
+      "duplicates": [
+       "1853049"
+      ],
+      "relevance": 0.9981
+     },
+     {
+      "rank": 9,
+      "id": "1234425",
+      "title": "",
+      "snippet": "There are many types of vaccines, but all generally work by teaching the immune system to recognize and eliminate a disease-causing microorganism. Some vaccines are designed to help the immune system prevent an infection and are called preventive vaccines.",
+      "score": 5.8046875,
+      "first_stage_score": 0.6635866165161133,
+      "first_stage_rank": 11,
+      "rerank_score": 5.8046875,
+      "duplicates": [],
+      "relevance": 0.997
+     },
+     {
+      "rank": 10,
+      "id": "2337134",
+      "title": "",
+      "snippet": "Vaccines are given to stimulate the body to produce antibodies that recognize and attack specific bacteria or viruses. If the person's immune system cannot make antibodies, giving a vaccine does not result in the production of antibodies and can even result in illness.",
+      "score": 5.7265625,
+      "first_stage_score": 0.6632463932037354,
+      "first_stage_rank": 12,
+      "rerank_score": 5.7265625,
+      "duplicates": [],
+      "relevance": 0.9968
+     }
+    ],
+    "timings": {
+     "retrieve_ms": 107.42,
+     "fetch_ms": 0.38,
+     "rerank_ms": 230.29,
+     "total_ms": 338.83,
+     "dedup_ms": 0.73
+    }
+   }
+  },
+  {
+   "query": "what causes the northern lights",
+   "params": {
+    "k": 10,
+    "candidates": 20,
+    "rerank": "true",
+    "dedup": "true"
+   },
+   "client_ms": 366.9,
+   "response": {
+    "query": "what causes the northern lights",
+    "retriever": "dense-ivfpq96:msmarco-MiniLM-L6-cos-v5+refine500",
+    "k": 10,
+    "candidates": 20,
+    "reranked": true,
+    "filtered_out": 0,
+    "dedup": true,
+    "collapsed": 4,
+    "results": [
+     {
+      "rank": 1,
+      "id": "2685156",
+      "title": "",
+      "snippet": "What causes the Northern Lights? The Northern Lights are actually the result of collisions between gaseous particles in the Earth's atmosphere with charged particles released from the sun's atmosphere. Variations in colour are due to the type of gas particles that are colliding.",
+      "score": 10.53125,
+      "first_stage_score": 0.8678215742111206,
+      "first_stage_rank": 1,
+      "rerank_score": 10.53125,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 2,
+      "id": "1533713",
+      "title": "",
+      "snippet": "1 The Northern Lights are caused by the interaction of the solar wind-a stream of charged particles escaping the Sun-and our planet's magnetic field and atmosphere. When these field lines snap back into position, charged particles from the solar wind are again pushed into the Earth's atmosphere, cau...",
+      "score": 10.4765625,
+      "first_stage_score": 0.8243182301521301,
+      "first_stage_rank": 3,
+      "rerank_score": 10.4765625,
+      "duplicates": [
+       "5085281",
+       "3744430"
+      ],
+      "relevance": 1.0
+     },
+     {
+      "rank": 3,
+      "id": "2908367",
+      "title": "",
+      "snippet": "Quick summary on what causes the northern lights. What causes the northern lightsThe Northern lights happen after collisions between charged particles released from the sun and gaseous particles in the Earth´s atmosphere. The color variations are due to what type of particles are colliding.",
+      "score": 10.3828125,
+      "first_stage_score": 0.7862555384635925,
+      "first_stage_rank": 7,
+      "rerank_score": 10.3828125,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 4,
+      "id": "2416998",
+      "title": "",
+      "snippet": "The Northern Lights are caused by the interaction of the solar wind – a stream of charged particles escaping the Sun – and our planet’s magnetic field and atmosphere. Read more about what causes the aurora borealis here. Northern Lights can be viewed year round in Cook County MN. However due to long...",
+      "score": 9.9765625,
+      "first_stage_score": 0.7698490619659424,
+      "first_stage_rank": 9,
+      "rerank_score": 9.9765625,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 5,
+      "id": "1978442",
+      "title": "",
+      "snippet": "What causes the aurora? The “northern lights” are caused by collisions between fast-moving particles (electrons) from space and the oxygen and nitrogen gas in our atmosphere. These electrons originate in the magnetosphere, the region of space controlled by Earth’s magnetic field. As they rain into t...",
+      "score": 9.6640625,
+      "first_stage_score": 0.8005676865577698,
+      "first_stage_rank": 6,
+      "rerank_score": 9.6640625,
+      "duplicates": [
+       "2908369",
+       "1978440"
+      ],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 6,
+      "id": "4968142",
+      "title": "",
+      "snippet": "The Northern Lights, also known as Aurora Borealis is caused by  collisions between electrically charged particles from the sun that  enters the earth's atmosphere. The type… of gas particles that are  colliding result in the variations in color. 3 people found this useful.",
+      "score": 9.625,
+      "first_stage_score": 0.742129921913147,
+      "first_stage_rank": 16,
+      "rerank_score": 9.625,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 7,
+      "id": "1562623",
+      "title": "",
+      "snippet": "1 The solar wind can cause the Earth's magnetic field lines to disconnect from our planet. 2  When these field lines snap back into position, charged particles from the solar wind are again pushed into the Earth's atmosphere, causing aurora. The Northern Lights are caused by the interaction of the s...",
+      "score": 9.4765625,
+      "first_stage_score": 0.7263379096984863,
+      "first_stage_rank": 19,
+      "rerank_score": 9.4765625,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 8,
+      "id": "2999470",
+      "title": "",
+      "snippet": "the northern lights are one of the big three natural phenomena created by our sun s magnetic activity the northern lights are caused by large numbers of electrons that stream towards the earth along a magnetic field and collide with air particles in our skythe air then lights up rather like what hap...",
+      "score": 9.4453125,
+      "first_stage_score": 0.7507905960083008,
+      "first_stage_rank": 12,
+      "rerank_score": 9.4453125,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 9,
+      "id": "1594662",
+      "title": "",
+      "snippet": "It is, in fact, all down to our relationship with the Sun. How the Aurora Borealis occur. The Northern Lights are caused by the interaction of the solar wind - a stream of charged particles escaping the Sun - and our planet's magnetic field and atmosphere.",
+      "score": 9.046875,
+      "first_stage_score": 0.7486543655395508,
+      "first_stage_rank": 13,
+      "rerank_score": 9.046875,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 10,
+      "id": "26971",
+      "title": "",
+      "snippet": "First, a little bit of background on them. The northern lights are the result of electrically charged particles from the sun colliding with gaseous particles in the Earth’s atmosphere, causing displays of bright, colourful dancing lights.",
+      "score": 9.03125,
+      "first_stage_score": 0.7739455699920654,
+      "first_stage_rank": 8,
+      "rerank_score": 9.03125,
+      "duplicates": [],
+      "relevance": 0.9999
+     }
+    ],
+    "timings": {
+     "retrieve_ms": 106.8,
+     "fetch_ms": 0.37,
+     "rerank_ms": 233.91,
+     "total_ms": 341.74,
+     "dedup_ms": 0.66
+    }
+   }
+  },
+  {
+   "query": "difference between a virus and bacteria",
+   "params": {
+    "k": 10,
+    "candidates": 20,
+    "rerank": "true",
+    "dedup": "true"
+   },
+   "client_ms": 363.5,
+   "response": {
+    "query": "difference between a virus and bacteria",
+    "retriever": "dense-ivfpq96:msmarco-MiniLM-L6-cos-v5+refine500",
+    "k": 10,
+    "candidates": 20,
+    "reranked": true,
+    "filtered_out": 0,
+    "dedup": true,
+    "collapsed": 9,
+    "results": [
+     {
+      "rank": 1,
+      "id": "4812131",
+      "title": "",
+      "snippet": "1 The biggest difference between viruses and bacteria is that viruses must have a living host-like a plant or animal-to multiply, while most bacteria can grow on non-living surfaces. Bacteria are intercellular organisms (i.e. they live in-between cells); whereas viruses are intracellular organisms (...",
+      "score": 10.9375,
+      "first_stage_score": 0.8244732618331909,
+      "first_stage_rank": 3,
+      "rerank_score": 10.9375,
+      "duplicates": [
+       "4812132",
+       "1427401",
+       "1542709",
+       "5213000"
+      ],
+      "relevance": 1.0
+     },
+     {
+      "rank": 2,
+      "id": "1490237",
+      "title": "",
+      "snippet": "The main difference between viruses and bacteria is that viruses are packets of genetic material and cannot survive on their own, while bacteria are single-celled organisms th … at can.Bacteria take in nutrients, expel waste, grow, and reproduce (multiply).ne major difference between viruses and bac...",
+      "score": 10.6484375,
+      "first_stage_score": 0.7984095811843872,
+      "first_stage_rank": 9,
+      "rerank_score": 10.6484375,
+      "duplicates": [
+       "5307466"
+      ],
+      "relevance": 1.0
+     },
+     {
+      "rank": 3,
+      "id": "6619128",
+      "title": "",
+      "snippet": "The difference between bacteria and virus is that pathogens are microorganisms - such as bacteria and viruses - that cause disease. Bacteria release toxins, and viruses damage our cells. White blood cells can ingest and destroy pathogens. They can produce antibodies to destroy pathogens, and antitox...",
+      "score": 10.46875,
+      "first_stage_score": 0.8241078853607178,
+      "first_stage_rank": 4,
+      "rerank_score": 10.46875,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 4,
+      "id": "7064828",
+      "title": "",
+      "snippet": "A virus is little more than a section of RNA or DNA covered by a protein shell. A bacterium, therefore, is at least a hundred times larger than a typical virus. One major difference between viruses and bacteria is the method of reproduction. A bacterium is a completely self-contained and self-reprod...",
+      "score": 10.265625,
+      "first_stage_score": 0.8278015851974487,
+      "first_stage_rank": 2,
+      "rerank_score": 10.265625,
+      "duplicates": [
+       "8816979"
+      ],
+      "relevance": 1.0
+     },
+     {
+      "rank": 5,
+      "id": "322227",
+      "title": "",
+      "snippet": "1 Viruses are the smallest and simplest life form known. 2  They are 10 to 100 times smaller than bacteria. 3  The biggest difference between viruses and bacteria is that viruses must have a living host-like a plant or animal-to multiply, while most bacteria can grow on non-living surfaces. Viruses ...",
+      "score": 10.0625,
+      "first_stage_score": 0.7788316011428833,
+      "first_stage_rank": 13,
+      "rerank_score": 10.0625,
+      "duplicates": [
+       "1427400",
+       "1427402",
+       "5213003"
+      ],
+      "relevance": 1.0
+     },
+     {
+      "rank": 6,
+      "id": "3671877",
+      "title": "",
+      "snippet": "13. Virus only binds to a specific host cell and is only harmful to that specific cell. One major difference between viruses and bacteria is the method of reproduction. Bacterium is a completely self-contained and self-reproducing unit.When the time is right, bacterium will split its DNA and RNA gen...",
+      "score": 10.0,
+      "first_stage_score": 0.775367021560669,
+      "first_stage_rank": 15,
+      "rerank_score": 10.0,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 7,
+      "id": "3671879",
+      "title": "",
+      "snippet": "Viruses and bacteria are both capable of killing humans and ravaging human health. It is a very fair question. There are some subtle and not so subtle differences between a virus and a bacterium (the plural is bacteria).A virus is an organism that contains no cells (acellular) whose genome consists ...",
+      "score": 9.8984375,
+      "first_stage_score": 0.8088359236717224,
+      "first_stage_rank": 8,
+      "rerank_score": 9.8984375,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 8,
+      "id": "7235592",
+      "title": "",
+      "snippet": "How are viruses different from bacteria? A) Bacteria are heterotrophic while viruses are autotrophic. B) Bacteria are living organisms; viruses are not. C) Bacteria have a membrane bound nucleus while viruses do not. D) Bacteria are multicellular; viruses are single cells.",
+      "score": 9.8125,
+      "first_stage_score": 0.7671900391578674,
+      "first_stage_rank": 17,
+      "rerank_score": 9.8125,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 9,
+      "id": "1895037",
+      "title": "",
+      "snippet": "Learn the basic differences. There are key differences between bacteria and viruses in size, origins, and effects on the body. Viruses are the smallest and simplest life form; they are 10 to 100 times smaller than bacteria. Bacteria are single-celled organisms that can live either inside or outside ...",
+      "score": 9.359375,
+      "first_stage_score": 0.7576737403869629,
+      "first_stage_rank": 20,
+      "rerank_score": 9.359375,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 10,
+      "id": "7060380",
+      "title": "",
+      "snippet": "Bacteria are MUCH BIGGER than viruses. A virus is a bacteriophage. When the virus infects the bacteria, the virus injects the bacteria with it's DNA code. The virus' DNA code … starts to multiply inside the bacteria, which then bursts, and the infected bacteria cells multiply over and over again.",
+      "score": 8.5234375,
+      "first_stage_score": 0.7589133977890015,
+      "first_stage_rank": 19,
+      "rerank_score": 8.5234375,
+      "duplicates": [],
+      "relevance": 0.9998
+     }
+    ],
+    "timings": {
+     "retrieve_ms": 112.01,
+     "fetch_ms": 0.36,
+     "rerank_ms": 231.26,
+     "total_ms": 344.53,
+     "dedup_ms": 0.9
+    }
+   }
+  },
+  {
+   "query": "how long to boil an egg",
+   "params": {
+    "k": 10,
+    "candidates": 20,
+    "rerank": "true",
+    "dedup": "true"
+   },
+   "client_ms": 350.8,
+   "response": {
+    "query": "how long to boil an egg",
+    "retriever": "dense-ivfpq96:msmarco-MiniLM-L6-cos-v5+refine500",
+    "k": 10,
+    "candidates": 20,
+    "reranked": true,
+    "filtered_out": 0,
+    "dedup": true,
+    "collapsed": 11,
+    "results": [
+     {
+      "rank": 1,
+      "id": "3406441",
+      "title": "",
+      "snippet": "Boiling an egg takes a while. Once the water starts to boil and the eggs are inside the boiling water, let the eggs boil for about 5 to 10 minutes. Careful, if they boil for too long, they might crack. Alternatively, bring the eggs and water to a boil. Remove from the heat, cover, and let sit for 25...",
+      "score": 9.921875,
+      "first_stage_score": 0.8268270492553711,
+      "first_stage_rank": 4,
+      "rerank_score": 9.921875,
+      "duplicates": [
+       "3406440",
+       "3406439",
+       "6567365"
+      ],
+      "relevance": 1.0
+     },
+     {
+      "rank": 2,
+      "id": "1930571",
+      "title": "",
+      "snippet": "When you boil an egg, a physical change occurs that causes it to harden. The time it takes to hard boil an egg depends on the size of the egg. Give the egg time to reach room temperature, about 12 to 15 minutes. Place the eggs in a pan of water and give the water time to boil. It should take eight t...",
+      "score": 9.6640625,
+      "first_stage_score": 0.8405336737632751,
+      "first_stage_rank": 1,
+      "rerank_score": 9.6640625,
+      "duplicates": [
+       "3358979"
+      ],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 3,
+      "id": "1021431",
+      "title": "",
+      "snippet": "For a hard-boiled egg, start the egg in cold water and bring up to the boil. Once the water is gently boiling, set the timer for between 7-10 minutes depending on how well cooked you like your eggs. The longer you boil the egg, the firmer it will be.",
+      "score": 9.390625,
+      "first_stage_score": 0.8079777956008911,
+      "first_stage_rank": 12,
+      "rerank_score": 9.390625,
+      "duplicates": [
+       "3469315",
+       "4480570"
+      ],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 4,
+      "id": "542968",
+      "title": "",
+      "snippet": "Depending on how cooked you like your hard boiled eggs, the eggs should be done perfectly in 10-12 minutes. That said, depending on your altitude, the shape of the pan, the size of the eggs, the ratio of water to eggs, it can take a few minutes more.",
+      "score": 9.2734375,
+      "first_stage_score": 0.8011863231658936,
+      "first_stage_rank": 19,
+      "rerank_score": 9.2734375,
+      "duplicates": [
+       "3134268",
+       "2223360"
+      ],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 5,
+      "id": "798899",
+      "title": "",
+      "snippet": "Set 12 eggs or as many as you desire (in a single layer) into a large saucepan. Fill pot with water to completely cover the eggs at least 1 inch above eggs and turn heat to high. Bring water to a boil, takes approximately 15 minutes. As soon as eggs start to boil, let boil for 10-12 minutes (I do 11...",
+      "score": 8.9609375,
+      "first_stage_score": 0.8168220520019531,
+      "first_stage_rank": 6,
+      "rerank_score": 8.9609375,
+      "duplicates": [
+       "2640103"
+      ],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 6,
+      "id": "1257034",
+      "title": "",
+      "snippet": "1 Stirring the eggs a couple of times while the water is coming to a boil helps center the yolk and ensure even cooking.  When you boil the eggs make sure the water is at boiling point. Cook the egg for 12 minutes for a large, 15 minutes for an extra large.",
+      "score": 8.765625,
+      "first_stage_score": 0.8144673705101013,
+      "first_stage_rank": 7,
+      "rerank_score": 8.765625,
+      "duplicates": [
+       "1501467",
+       "4268124"
+      ],
+      "relevance": 0.9998
+     },
+     {
+      "rank": 7,
+      "id": "1373121",
+      "title": "",
+      "snippet": "Boil eggs for approximately 20 minutes. Once eggs are hard, drain water and allow eggs to cool. You may also let them sit in cold water for 15 minutes. Peel eggs then cut them long wise. Set hardened egg whites to the side. Put egg yolks in a small to medium size mixing bowl. Mash yolks with a fork.",
+      "score": 8.5078125,
+      "first_stage_score": 0.8024762272834778,
+      "first_stage_rank": 16,
+      "rerank_score": 8.5078125,
+      "duplicates": [],
+      "relevance": 0.9998
+     },
+     {
+      "rank": 8,
+      "id": "7327685",
+      "title": "",
+      "snippet": "I always bring the water up to a boil and then put the eggs in. I let them cook until one of the cracks or for about 7 mins. an egg takes about 15-20 minutes to boil. Boil the water, then put the eggs in for 10 mins.",
+      "score": 7.90625,
+      "first_stage_score": 0.8135281205177307,
+      "first_stage_rank": 9,
+      "rerank_score": 7.90625,
+      "duplicates": [],
+      "relevance": 0.9996
+     },
+     {
+      "rank": 9,
+      "id": "3217133",
+      "title": "",
+      "snippet": "Recipe ideas for hard-boiled eggs include deviled eggs, egg salad, breakfast burritos, salad nicoise, and much more! When you boil the eggs make sure the water is at boiling point. Cook the egg for 12 minutes for a large, 15 minutes for an extra large. Letting the eggs come to room temperature befor...",
+      "score": 7.390625,
+      "first_stage_score": 0.809235692024231,
+      "first_stage_rank": 11,
+      "rerank_score": 7.390625,
+      "duplicates": [],
+      "relevance": 0.9994
+     }
+    ],
+    "timings": {
+     "retrieve_ms": 113.85,
+     "fetch_ms": 0.33,
+     "rerank_ms": 231.8,
+     "total_ms": 346.89,
+     "dedup_ms": 0.91
+    }
+   }
+  },
+  {
+   "query": "why is the sky blue",
+   "params": {
+    "k": 10,
+    "candidates": 20,
+    "rerank": "true",
+    "dedup": "true"
+   },
+   "client_ms": 403.5,
+   "response": {
+    "query": "why is the sky blue",
+    "retriever": "dense-ivfpq96:msmarco-MiniLM-L6-cos-v5+refine500",
+    "k": 10,
+    "candidates": 20,
+    "reranked": true,
+    "filtered_out": 0,
+    "dedup": true,
+    "collapsed": 2,
+    "results": [
+     {
+      "rank": 1,
+      "id": "1059458",
+      "title": "",
+      "snippet": "Why is the sky blue? A clear cloudless day-time sky is blue because molecules in the air scatter blue light from the sun more than they scatter red light. When we look towards the sun at sunset, we see red and orange colours because the blue light has been scattered out and away from the line of sig...",
+      "score": 10.2109375,
+      "first_stage_score": 0.8129045963287354,
+      "first_stage_rank": 2,
+      "rerank_score": 10.2109375,
+      "duplicates": [
+       "6753050",
+       "6753052"
+      ],
+      "relevance": 1.0
+     },
+     {
+      "rank": 2,
+      "id": "1059464",
+      "title": "",
+      "snippet": "The sky is blue because the incident light interacts with the gas molecules in the air in such as fashion that more of the light in the blue part of the spectrum is scattered, reaching our eyes on the surface of the planet.",
+      "score": 9.9375,
+      "first_stage_score": 0.7547942996025085,
+      "first_stage_rank": 8,
+      "rerank_score": 9.9375,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 3,
+      "id": "784396",
+      "title": "",
+      "snippet": "The sky is blue because light scatters off the atmospheric gasses. Light scatter more strongly at the blue end of the the visible spectrum then red.So, looking away from the sun into the sky you see more blue than other colors.",
+      "score": 9.5703125,
+      "first_stage_score": 0.7666854858398438,
+      "first_stage_rank": 6,
+      "rerank_score": 9.5703125,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 4,
+      "id": "2514376",
+      "title": "",
+      "snippet": "Why is the sky blue? When the sun's light reaches the Earth's atmosphere it is scattered, or deflected, by the tiny molecules of gas (mostly nitrogen and oxygen) in the air. Because these molecules are much smaller than the wavelength of visible light, the amount of scattering depends on the wavelen...",
+      "score": 9.3671875,
+      "first_stage_score": 0.7872375249862671,
+      "first_stage_rank": 4,
+      "rerank_score": 9.3671875,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 5,
+      "id": "1059459",
+      "title": "",
+      "snippet": "Why is the sky blue and the clouds white? The sky is blue because that is the color of Nitrogen in large quantities. The atmosphere absorbs all light except for blue, which is reflected back.",
+      "score": 9.296875,
+      "first_stage_score": 0.7993221879005432,
+      "first_stage_rank": 3,
+      "rerank_score": 9.296875,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 6,
+      "id": "4445931",
+      "title": "",
+      "snippet": "The answer to why the sky is blue isn't quite correct. The sky is blue not because the atmosphere absorbs the other colors, but because the atmosphere tends to scatter shorter wavelength (blue) light to a greater extent than longer wavelength (red) light.",
+      "score": 9.25,
+      "first_stage_score": 0.7568904161453247,
+      "first_stage_rank": 7,
+      "rerank_score": 9.25,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 7,
+      "id": "1572338",
+      "title": "",
+      "snippet": "In general, the sky appears to be blue because of the way white light is reflected or scattered in the atmosphere. (The word scatter is a physics term.) The blue appearance … of the sky is not the reflection of light off the ocean, as some seem to think.   We don't normally think of the atmosphere a...",
+      "score": 8.9765625,
+      "first_stage_score": 0.7296816110610962,
+      "first_stage_rank": 14,
+      "rerank_score": 8.9765625,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 8,
+      "id": "520833",
+      "title": "",
+      "snippet": "The explanation for why the sky is blue involves so much of the natural sciences: the colors within the visual spectrum, the wave nature of light, the angle at which sunlight hits the atmosphere, the mathematics of scattering, the size of nitrogen and oxygen molecules, and even the way human eyes pe...",
+      "score": 8.8671875,
+      "first_stage_score": 0.7761944532394409,
+      "first_stage_rank": 5,
+      "rerank_score": 8.8671875,
+      "duplicates": [],
+      "relevance": 0.9999
+     },
+     {
+      "rank": 9,
+      "id": "4970327",
+      "title": "",
+      "snippet": "The sky is blue due to the end-of-the-spectrum light that passes through the ozone layer. The smaller the frequency, the easier it is for the beams to pass through the O3 with…out being deflected. Thus, the blue end of the spectrum reaches through the ozone to give the sky a blue color.   When it is...",
+      "score": 8.703125,
+      "first_stage_score": 0.7181370854377747,
+      "first_stage_rank": 17,
+      "rerank_score": 8.703125,
+      "duplicates": [],
+      "relevance": 0.9998
+     },
+     {
+      "rank": 10,
+      "id": "2514381",
+      "title": "",
+      "snippet": "Why is the sky blue? Take a look at light through a prism and notice all the different colors that you can see. Light that looks white to our eyes actually is made up of many different colors. Each color can be thought of as a light wave with a different wavelength (or size).",
+      "score": 8.296875,
+      "first_stage_score": 0.7466849088668823,
+      "first_stage_rank": 11,
+      "rerank_score": 8.296875,
+      "duplicates": [],
+      "relevance": 0.9998
+     }
+    ],
+    "timings": {
+     "retrieve_ms": 109.73,
+     "fetch_ms": 0.3,
+     "rerank_ms": 266.97,
+     "total_ms": 377.55,
+     "dedup_ms": 0.56
+    }
+   }
+  },
+  {
+   "query": "symptoms of vitamin d deficiency",
+   "params": {
+    "k": 10,
+    "candidates": 20,
+    "rerank": "true",
+    "dedup": "true"
+   },
+   "client_ms": 361.0,
+   "response": {
+    "query": "symptoms of vitamin d deficiency",
+    "retriever": "dense-ivfpq96:msmarco-MiniLM-L6-cos-v5+refine500",
+    "k": 10,
+    "candidates": 20,
+    "reranked": true,
+    "filtered_out": 0,
+    "dedup": true,
+    "collapsed": 2,
+    "results": [
+     {
+      "rank": 1,
+      "id": "1925563",
+      "title": "",
+      "snippet": "Symptoms of Vitamin D Deficiency. Vitamin D isn’t an optional nutrient, our bodies need it, and without it, problems can arise. Many people go through life with nagging aches and pains, allergies, malaise, and a general lack of vitality. Such nonspecific symptoms can be the result of one, or several...",
+      "score": 11.1171875,
+      "first_stage_score": 0.861127495765686,
+      "first_stage_rank": 2,
+      "rerank_score": 11.1171875,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 2,
+      "id": "8535433",
+      "title": "",
+      "snippet": "The symptoms of vitamin D deficiency can vary amongst individuals, depending on presence of any complications, such as bone fracture, the severity of vitamin D deficiency, and other factors. Many people have no symptoms of vitamin D deficiency until complications are present. Symptoms may also be mi...",
+      "score": 11.0625,
+      "first_stage_score": 0.8514381647109985,
+      "first_stage_rank": 5,
+      "rerank_score": 11.0625,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 3,
+      "id": "467729",
+      "title": "",
+      "snippet": "Vitamin D deficiency symptoms explained: the top 9 warning signs. Some people who have a vitamin D deficiency have no immediate symptoms. Those who do have symptoms may experience restless sleep, muscle cramps, general fatigue, joint pain, muscle pain or weakness, inability to concentrate, headaches...",
+      "score": 10.9453125,
+      "first_stage_score": 0.8442063927650452,
+      "first_stage_rank": 7,
+      "rerank_score": 10.9453125,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 4,
+      "id": "1925567",
+      "title": "",
+      "snippet": "Specific symptoms related to vitamin D deficiency include: 1  Muscle weakness. 2  Joint aches and discomfort. 3  High blood pressure. 4  Inability to concentrate or focus. 5  Urinary incontinence, bladder issues. 6  Constipation. 7  Headaches. 8  Cold/flu, immune system decline. 9  Mood disorders.",
+      "score": 10.8125,
+      "first_stage_score": 0.8629852533340454,
+      "first_stage_rank": 1,
+      "rerank_score": 10.8125,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 5,
+      "id": "7640985",
+      "title": "",
+      "snippet": "The symptoms of vitamin D deficiency are sometimes vague and can include tiredness and general aches and pains. Some people may not have any symptoms at all. If you have a severe vitamin D deficiency you may have pain in your bones and weakness, which may mean you have difficulty getting around. You...",
+      "score": 10.7421875,
+      "first_stage_score": 0.8326823711395264,
+      "first_stage_rank": 11,
+      "rerank_score": 10.7421875,
+      "duplicates": [
+       "8079037",
+       "7069751"
+      ],
+      "relevance": 1.0
+     },
+     {
+      "rank": 6,
+      "id": "553990",
+      "title": "",
+      "snippet": "Other Signs and Symptoms. Fatigue is a common sign of vitamin D deficiency. You may feel like you have no energy. Muscle pain and aches, muscle cramps and weakness are other commonly reported symptoms associated with low vitamin D levels in the body. Not everyone who has vitamin D deficiency has sym...",
+      "score": 10.6640625,
+      "first_stage_score": 0.8515603542327881,
+      "first_stage_rank": 4,
+      "rerank_score": 10.6640625,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 7,
+      "id": "1925569",
+      "title": "",
+      "snippet": "Specific symptoms related to vitamin D deficiency include: Muscle weakness; Joint aches and discomfort; High blood pressure; Inability to concentrate or focus; Urinary incontinence, bladder issues; Constipation; Headaches; Cold/flu, immune system decline; Mood disorders; More serious diseases linked...",
+      "score": 10.6640625,
+      "first_stage_score": 0.8308550715446472,
+      "first_stage_rank": 13,
+      "rerank_score": 10.6640625,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 8,
+      "id": "5177443",
+      "title": "",
+      "snippet": "Early symptoms of vitamin D deficiency include loss of appetite, which may be related to other symptoms, such as nausea, fatigue, weakness, depression and heavy sweating, according to Vitamins: Fundamental Aspects in Nutrition and Health..",
+      "score": 10.5078125,
+      "first_stage_score": 0.8304011821746826,
+      "first_stage_rank": 14,
+      "rerank_score": 10.5078125,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 9,
+      "id": "7069750",
+      "title": "",
+      "snippet": "Vitamin D deficiency doesn’t always cause symptoms. When it does, some of the symptoms may include: difficulty thinking clearly; bone pain; frequent bone fractures; muscle weakness; soft bones that may result in deformities ; unexplained fatigue; Many people don't develop symptoms until their vitami...",
+      "score": 10.421875,
+      "first_stage_score": 0.8281042575836182,
+      "first_stage_rank": 15,
+      "rerank_score": 10.421875,
+      "duplicates": [],
+      "relevance": 1.0
+     },
+     {
+      "rank": 10,
+      "id": "7646339",
+      "title": "",
+      "snippet": "The symptoms of vitamin D deficiency are easy to miss. While they vary from person to person, the following is a list of symptoms that seniors with this deficiency may experience: 1  Fatigue. 2  General muscle pain and weakness. 3  Muscle cramps. 4  Joint pain. 5  Chronic pain. 6  Weight gain. 7  Hi...",
+      "score": 10.421875,
+      "first_stage_score": 0.8275372982025146,
+      "first_stage_rank": 16,
+      "rerank_score": 10.421875,
+      "duplicates": [],
+      "relevance": 1.0
+     }
+    ],
+    "timings": {
+     "retrieve_ms": 113.7,
+     "fetch_ms": 0.33,
+     "rerank_ms": 231.96,
+     "total_ms": 346.61,
+     "dedup_ms": 0.62
+    }
+   }
+  }
+ ]
+}

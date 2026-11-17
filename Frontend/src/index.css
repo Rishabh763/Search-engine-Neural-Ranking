@@ -455,6 +455,12 @@ main {
   font-size: var(--t-xs);
 }
 
+.shortfall {
+  margin: 16px 0 0;
+  color: var(--slate);
+  font-size: var(--t-sm);
+}
+
 .empty {
   color: var(--slate);
 }

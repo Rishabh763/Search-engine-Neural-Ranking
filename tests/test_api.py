@@ -120,3 +120,8 @@ def test_cors_allows_only_configured_origins(toy_collection, tmp_path, monkeypat
 def test_cors_default_allows_local_vite(client):
     r = client.get("/health", headers={"Origin": "http://localhost:5173"})
     assert r.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+
+def test_root_redirects_to_docs(client):
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == "/docs"

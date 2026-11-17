@@ -39,6 +39,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from searchengine.pipeline import SearchPipeline
@@ -131,6 +132,11 @@ def create_app(pipeline: SearchPipeline | None = None, meta: dict | None = None)
             except Exception:  # noqa: BLE001 - informational only
                 state["machine"] = None
         return state["machine"]
+
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        """The API has no page of its own: the web frontend is Frontend/ (port 5173 locally)."""
+        return RedirectResponse("/docs")
 
     @app.get("/health")
     def health() -> dict:
